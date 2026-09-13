@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MaterialAgent</string>
+    <string name="app_tagline">Your Hermes agent, in your pocket</string>
+
+    <!-- Onboarding -->
+    <string name="connect">Connect</string>
+    <string name="server_url">Server address</string>
+    <string name="server_url_hint">http://192.168.1.27:9119</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_send">Send message</string>
+    <string name="cd_stop">Stop the agent</string>
+    <string name="cd_new_session">New session</string>
+    <string name="cd_menu">Menu</string>
+    <string name="cd_back">Back</string>
+</resources>

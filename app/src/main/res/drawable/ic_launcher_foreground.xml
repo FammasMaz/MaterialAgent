@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MaterialAgent mark: geometric caduceus — the staff, twin serpents and
+     wings of Hermes, reduced to strokes and blades so it stays legible at
+     24 dp and reads as a single confident gesture at 108 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Wings (blades), gold -->
+    <path
+        android:fillColor="#FFC24B"
+        android:pathData="M53,42 L24,31 L27.5,41 L47,47.5 Z" />
+    <path
+        android:fillColor="#FFC24B"
+        android:pathData="M55,42 L84,31 L80.5,41 L61,47.5 Z" />
+    <path
+        android:fillColor="#F5B23C"
+        android:pathData="M53,50 L30,43 L33,52 L48,56.5 Z" />
+    <path
+        android:fillColor="#F5B23C"
+        android:pathData="M55,50 L78,43 L75,52 L60,56.5 Z" />
+
+    <!-- Staff -->
+    <path
+        android:pathData="M54,33 L54,87"
+        android:strokeColor="#FFE9C0"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+
+    <!-- Apex -->
+    <path
+        android:fillColor="#FFE9C0"
+        android:pathData="M54,21 m-5.5,0 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0" />
+
+    <!-- Twin serpents -->
+    <path
+        android:pathData="M45,49 C61,55 49,63 54,73"
+        android:strokeColor="#FFC24B"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M63,49 C47,55 59,63 54,73"
+        android:strokeColor="#FFC24B"
+        android:strokeWidth="5.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
