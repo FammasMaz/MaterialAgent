@@ -15,8 +15,20 @@ local.properties
 captures/
 *.apk
 *.aab
+
+# Credentials — this repository is public, so nothing secret may be committed.
+# `!release.keystore` used to be here, which would have re-included a signing
+# key sitting in the worktree. Keystores stay out, with no exceptions.
 *.keystore
-!release.keystore
+*.jks
+*.pem
+*.p12
+.env
+.env.*
+.hermes-test-token
+auth.json
+accounts/
+local.properties
 
 # Logs
 *.log

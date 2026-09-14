@@ -68,7 +68,7 @@ class HermesLiveTest {
      */
     @Test(timeout = 360_000)
     fun realGatewayTurnRoundTrip() {
-        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        val wsUrl = configuredGateway()
 
         // Precondition, not assertion: a missing server means "nothing to test",
         // and a build must not fail just because the tunnel is down.
@@ -124,7 +124,7 @@ class HermesLiveTest {
      */
     @Test(timeout = 420_000)
     fun approvalResponseUsesTheServersParameterNames() {
-        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        val wsUrl = configuredGateway()
         assumeTrue(
             "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
             gatewayReachable(wsUrl),
@@ -263,7 +263,7 @@ class HermesLiveTest {
      */
     @Test(timeout = 420_000)
     fun runtimeIdSurvivesASocketDrop() {
-        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        val wsUrl = configuredGateway()
         assumeTrue(
             "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
             gatewayReachable(wsUrl),
@@ -384,7 +384,7 @@ class HermesLiveTest {
      */
     @Test(timeout = 360_000)
     fun branchNeedsTheRuntimeSessionId() {
-        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        val wsUrl = configuredGateway()
         assumeTrue(
             "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
             gatewayReachable(wsUrl),
@@ -830,8 +830,30 @@ class HermesLiveTest {
     }
 
     private companion object {
-        /** Loopback dev tunnel. Override with HERMES_TEST_WS to point elsewhere. */
-        const val DEFAULT_WS_URL = "ws://127.0.0.1:19119/api/ws?token=example-token"
+        /**
+         * Resolves where the gateway is, or skips the test.
+         *
+         * The token is deliberately not defaulted anywhere in this file: the
+         * repository is public, and a committed credential is a leaked
+         * credential — "it only guards a loopback port" does not help, because
+         * loopback is one `ssh -L` away from being reachable. Set
+         * `HERMES_TEST_WS` to a full URL, or `HERMES_TEST_TOKEN` for the usual
+         * tunnel, and the live tests run. Set neither and they skip, which is
+         * what happens on a fresh checkout and on CI.
+         */
+        fun configuredGateway(): String {
+            val explicit = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() }
+            val fromToken = System.getenv("HERMES_TEST_TOKEN")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { "ws://127.0.0.1:19119/api/ws?token=$it" }
+            val url = explicit ?: fromToken
+            assumeTrue(
+                "Skipping: set HERMES_TEST_WS (or HERMES_TEST_TOKEN) to run live tests.",
+                url != null,
+            )
+            return url!!
+        }
 
         /** Cheap, deterministic: a model that is merely online can answer this. */
         const val PROMPT = "Reply with exactly the word: pong"

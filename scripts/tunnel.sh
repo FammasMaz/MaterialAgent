@@ -16,17 +16,36 @@
 #   HERMES_TUNNEL_HOST        ssh host alias            (default: home-server)
 #   HERMES_TUNNEL_REMOTE_PORT gateway port on the server (default: 9119)
 #   HERMES_TUNNEL_LOCAL_PORT  local port to bind        (default: 19119)
-#   HERMES_TEST_TOKEN         loopback dev token        (default: example-token)
+#   HERMES_TEST_TOKEN         loopback dev token        (no default — see below)
+#   HERMES_TEST_TOKEN_FILE    file holding that token     (default: .hermes-test-token)
 #
 set -euo pipefail
 
 SSH_HOST="${HERMES_TUNNEL_HOST:-home-server}"
 REMOTE_PORT="${HERMES_TUNNEL_REMOTE_PORT:-9119}"
 LOCAL_PORT="${HERMES_TUNNEL_LOCAL_PORT:-19119}"
-TOKEN="${HERMES_TEST_TOKEN:-example-token}"
+TOKEN_FILE="${HERMES_TEST_TOKEN_FILE:-.hermes-test-token}"
+
+# The token is deliberately not defaulted. This repository is public, and a
+# working credential committed to a public repository is not private
+# even when it only guards a loopback port — the port is one `ssh -L` away from
+# being reachable. It is read from the environment, or from a gitignored file so
+# a local checkout keeps working without writing it into a tracked file.
+#
+# A missing token is not fatal: the forward itself does not need one. It only
+# means this script cannot print the `export HERMES_TEST_WS=...` line for you.
+resolve_token() {
+    if [[ -n "${HERMES_TEST_TOKEN:-}" ]]; then
+        printf '%s' "$HERMES_TEST_TOKEN"
+    elif [[ -f "$TOKEN_FILE" ]]; then
+        tr -d '[:space:]' <"$TOKEN_FILE"
+    fi
+}
+
+TOKEN="$(resolve_token)"
 
 HEALTH_URL="http://127.0.0.1:${LOCAL_PORT}/api/health"
-WS_URL="ws://127.0.0.1:${LOCAL_PORT}/api/ws?token=${TOKEN}"
+WS_URL="ws://127.0.0.1:${LOCAL_PORT}/api/ws?token=${TOKEN}"   # printed only when TOKEN is set
 
 # State lives outside the repo so repeated runs never dirty the worktree.
 STATE_DIR="${TMPDIR:-/tmp}"
@@ -61,7 +80,19 @@ wait_for_health() {
 
 print_ready() {
     echo "tunnel ready  -> $HEALTH_URL"
-    echo "export HERMES_TEST_WS='$WS_URL'"
+    if [[ -n "$TOKEN" ]]; then
+        echo "export HERMES_TEST_WS='$WS_URL'"
+    else
+        cat >&2 <<'USAGE'
+The forward is up, but no gateway token is configured, so no HERMES_TEST_WS line
+is printed. Supply one — never by committing it:
+
+    printf '%s' '<your-token>' > .hermes-test-token   # gitignored
+    # or: export HERMES_TEST_TOKEN='<your-token>'
+
+The dev server reads its token from HERMES_DASHBOARD_SESSION_TOKEN.
+USAGE
+    fi
 }
 
 cmd_start() {

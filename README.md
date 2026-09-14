@@ -69,9 +69,17 @@ server on `home-server`, forward it, and point the test at it:
 
 ```bash
 ssh -N -L 19119:127.0.0.1:9119 home-server &     # or scripts/tunnel.sh start
-HERMES_TEST_WS='ws://127.0.0.1:19119/api/ws?token=<devtoken>' \
+
+# The token is never stored in this repository. Keep it in the environment, or
+# in .hermes-test-token (gitignored) and scripts/tunnel.sh will pick it up.
+printf '%s' "$YOUR_TOKEN" > .hermes-test-token
+
+HERMES_TEST_TOKEN="$(cat .hermes-test-token)" \
   ./gradlew :app:testDebugUnitTest --tests '*HermesLiveTest*'
 ```
+
+Without a token the live tests skip rather than fail, so a clean checkout and CI
+both stay green. The dev server takes its token from `HERMES_DASHBOARD_SESSION_TOKEN`.
 
 It connects, lists sessions, creates one, sends a turn, waits for `message.delta` and the
 authoritative `message.complete`, parses usage, confirms the session persisted, reads history
