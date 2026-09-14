@@ -11,6 +11,7 @@ import com.materialagent.core.str
 import com.materialagent.core.strAny
 import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.HistoryRow
+import com.materialagent.core.model.MediaMarkers
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.core.model.Usage
 import kotlinx.serialization.json.JsonObject
@@ -71,8 +72,14 @@ object ChatReducer {
                 if (chunk.isEmpty()) return state
                 val next = openAssistant(state, stamp)
                 updateLast(next) { entry ->
+                    // A marker can be split across two deltas ("MEDIA:/tmp/ver"
+                    // then "sion.pdf"), so the raw stream is kept and re-stripped
+                    // in full each time — a half-arrived path is recognised
+                    // rather than shown.
+                    val raw = ((entry.streamRaw ?: entry.text) + chunk).takeLast(MAX_STREAM_CHARS)
                     entry.copy(
-                        text = (entry.text + chunk).takeLast(MAX_STREAM_CHARS),
+                        text = MediaMarkers.stripStreaming(raw),
+                        streamRaw = raw,
                         status = EntryStatus.STREAMING,
                         statusLine = "",
                     )
@@ -103,13 +110,27 @@ object ChatReducer {
                     val opened = openAssistant(state, stamp)
                     updateLast(opened) { entry ->
                         // The complete payload is authoritative; deltas can drop.
+                        val streamed = (entry.streamRaw ?: entry.text).length
                         entry.copy(
-                            text = if (finalText.length >= entry.text.length) finalText else entry.text,
+                            text = if (finalText.length >= streamed) finalText else entry.text,
                             statusLine = "",
                         )
                     }
                 }
-                val finished = updateLast(base) { entry ->
+                // The complete text is the turn's only authoritative copy, so it
+                // is where markers become attachments: cleaned prose and the refs
+                // land on the entry together and nothing downstream sees a path.
+                val withMedia = updateLast(base) { entry ->
+                    val extracted = MediaMarkers.extract(entry.text)
+                    entry.copy(
+                        text = extracted.text,
+                        media = extracted.media,
+                        // The raw stream existed only to hide markers while they
+                        // were arriving; the final text supersedes it.
+                        streamRaw = null,
+                    )
+                }
+                val finished = updateLast(withMedia) { entry ->
                     entry.copy(
                         reasoning = payload.str("reasoning")?.takeIf { it.isNotBlank() } ?: entry.reasoning,
                         status = if (failed) EntryStatus.ERROR else EntryStatus.COMPLETE,
@@ -411,15 +432,21 @@ object ChatReducer {
                     ),
                 )
 
-                "assistant" -> entries.add(
-                    TranscriptEntry(
-                        id = row.rowId?.toString() ?: "h-assistant-$index",
-                        kind = EntryKind.ASSISTANT,
-                        text = row.text.orEmpty(),
-                        timestamp = row.timestamp,
-                        completedAt = row.timestamp,
-                    ),
-                )
+                "assistant" -> {
+                    // History rows carry the same markers the live text did, so a
+                    // reconnected transcript must resolve them the same way.
+                    val extracted = MediaMarkers.extract(row.text.orEmpty())
+                    entries.add(
+                        TranscriptEntry(
+                            id = row.rowId?.toString() ?: "h-assistant-$index",
+                            kind = EntryKind.ASSISTANT,
+                            text = extracted.text,
+                            media = extracted.media,
+                            timestamp = row.timestamp,
+                            completedAt = row.timestamp,
+                        ),
+                    )
+                }
 
                 "tool" -> entries.add(
                     TranscriptEntry(

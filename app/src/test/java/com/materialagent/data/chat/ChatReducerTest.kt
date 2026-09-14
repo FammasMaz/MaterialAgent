@@ -9,6 +9,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.HistoryRow
+import com.materialagent.core.model.MediaKind
 import com.materialagent.core.model.SessionInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -586,6 +587,114 @@ class ChatReducerTest {
         val request = expired.entries.single().interactive!!
         assertTrue(request.expired)
         assertFalse(request.isPending)
+    }
+
+    // ── attachments ─────────────────────────────────────────────────────────
+
+    @Test
+    fun aCompletedTurnResolvesMarkersIntoAttachments() {
+        var state = ChatReducer.submitUser(ChatTranscript(), "chart please", 1.0)
+        state = ChatReducer.reduce(
+            state,
+            event(GatewayEvent.MESSAGE_COMPLETE, p("text" to "Done:\nMEDIA:/tmp/chart.png"), seq = 2),
+            2.0,
+        )
+
+        val assistant = state.entries.last()
+        assertEquals(EntryKind.ASSISTANT, assistant.kind)
+        assertEquals("Done:", assistant.text)
+        assertEquals(EntryStatus.COMPLETE, assistant.status)
+        val ref = assistant.media.single()
+        assertEquals("/tmp/chart.png", ref.path)
+        assertEquals(MediaKind.IMAGE, ref.kind)
+        assertNull(assistant.streamRaw)
+        assertTrue(state.visibleEntries.any { it.media.isNotEmpty() })
+    }
+
+    /** An answer can be nothing but a file, and it still has to be drawn. */
+    @Test
+    fun aTurnThatIsOnlyAnAttachmentStillCountsAsContent() {
+        var state = ChatReducer.submitUser(ChatTranscript(), "chart", 1.0)
+        state = ChatReducer.reduce(
+            state,
+            event(GatewayEvent.MESSAGE_COMPLETE, p("text" to "MEDIA:/tmp/chart.png"), seq = 2),
+            2.0,
+        )
+
+        val assistant = state.entries.last()
+        assertEquals("", assistant.text)
+        assertEquals(1, assistant.media.size)
+        assertTrue(assistant.hasContent)
+        assertEquals(1, state.visibleEntries.count { it.kind == EntryKind.ASSISTANT })
+    }
+
+    /**
+     * The marker rides inside the prose, so the streamed text must never show it —
+     * not even when a delta boundary lands in the middle of the path.
+     */
+    @Test
+    fun streamingDeltasNeverShowAMarker() {
+        var state = ChatReducer.submitUser(ChatTranscript(), "chart", 1.0)
+        state = ChatReducer.reduce(
+            state,
+            event(GatewayEvent.MESSAGE_DELTA, p("text" to "Here you go MEDIA:/tmp/ver"), seq = 2),
+            2.0,
+        )
+        state = ChatReducer.reduce(
+            state,
+            event(GatewayEvent.MESSAGE_DELTA, p("text" to "sion.png"), seq = 3),
+            3.0,
+        )
+
+        val streaming = state.entries.last()
+        assertEquals("Here you go", streaming.text)
+        assertEquals(EntryStatus.STREAMING, streaming.status)
+        assertTrue(streaming.media.isEmpty())
+
+        state = ChatReducer.reduce(
+            state,
+            event(
+                GatewayEvent.MESSAGE_COMPLETE,
+                p("text" to "Here you go MEDIA:/tmp/version.png"),
+                seq = 4,
+            ),
+            4.0,
+        )
+
+        val done = state.entries.last()
+        assertEquals("Here you go", done.text)
+        assertEquals("/tmp/version.png", done.media.single().path)
+        assertNull(done.streamRaw)
+    }
+
+    /**
+     * A reconnected transcript is rebuilt from history rows, which carry the same
+     * markers the live text did — so the raw path must not come back either.
+     */
+    @Test
+    fun historyRowsResolveMarkersIntoAttachmentsToo() {
+        val rebuilt = ChatReducer.fromHistory(
+            ChatTranscript(),
+            listOf(
+                HistoryRow(
+                    role = "assistant",
+                    text = "Done:\nMEDIA:/tmp/chart.png",
+                    toolName = null,
+                    toolContext = null,
+                    toolArgs = null,
+                    timestamp = 2.0,
+                    rowId = 11L,
+                ),
+            ),
+            sessionId = "s-1",
+            storedSessionId = "s-1",
+            title = "t",
+            info = null,
+        )
+
+        val assistant = rebuilt.entries.single()
+        assertEquals("Done:", assistant.text)
+        assertEquals("/tmp/chart.png", assistant.media.single().path)
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

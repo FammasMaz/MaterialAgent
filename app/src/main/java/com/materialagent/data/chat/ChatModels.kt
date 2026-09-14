@@ -1,5 +1,6 @@
 package com.materialagent.data.chat
 
+import com.materialagent.core.model.MediaRef
 import kotlinx.serialization.json.JsonObject
 
 /** What kind of row a transcript entry is. Drives the surface's geometry. */
@@ -106,6 +107,12 @@ data class TranscriptEntry(
     val kind: EntryKind,
     val text: String = "",
     val reasoning: String = "",
+    /**
+     * Files the turn delivered, in the order the agent named them. Written once,
+     * from the authoritative `message.complete` text (see `MediaMarkers`), never
+     * while the answer is still streaming.
+     */
+    val media: List<MediaRef> = emptyList(),
     /** Short status line from `thinking.delta` — the agent's spinner copy. */
     val statusLine: String = "",
     val tool: ToolInfo? = null,
@@ -117,9 +124,22 @@ data class TranscriptEntry(
     val error: String? = null,
     /** True for `message.interim` commentary that is not the turn's final answer. */
     val interim: Boolean = false,
+    /**
+     * The raw text a still-streaming answer has arrived as, markers and all.
+     * `text` is what may be shown; this is only kept so a `MEDIA:` marker split
+     * across two deltas can still be recognised, and is cleared the moment the
+     * authoritative complete text lands. Never render it.
+     */
+    val streamRaw: String? = null,
 ) {
     val isStreaming: Boolean get() = status == EntryStatus.STREAMING
-    val hasContent: Boolean get() = text.isNotBlank() || reasoning.isNotBlank()
+
+    /**
+     * Attachments count as content: an answer can be nothing but a file, and an
+     * entry with only media must still be drawn rather than filtered away.
+     */
+    val hasContent: Boolean
+        get() = text.isNotBlank() || reasoning.isNotBlank() || media.isNotEmpty()
 }
 
 /** Everything the chat screen renders, plus the live runtime state it needs. */
