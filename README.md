@@ -126,14 +126,51 @@ is still unanswered. The whole path is verified rather than assumed — pressing
 the emulator made `rm -rf /tmp/probe-dir` actually run (the directory was gone when checked on the
 server), and the denial path left it in place.
 
+## Verification
+
+What has been checked, and how — because "it builds" is not the same claim as "it works".
+
+**Transport and agent loop.** 62 JVM tests, no failures, four of which run against a live gateway
+through the tunnel to `home-server`: a full turn round trip (`message.delta` … authoritative
+`message.complete`), the branching contract including the rejected stored-id call, an approval
+round trip with the granted command proven to have run, and runtime-id stability across a socket
+drop.
+
+**Haptics, at the platform rather than the source.** The emulator's vibrator service keeps an
+aggregated history of the effects an app actually played, and `com.materialagent.debug` has
+entries that match the cue table primitive for primitive and amplitude for amplitude:
+
+```
+Primitive=TICK(scale=0.80, delay=0ms)                                  -> SENT
+Primitive=TICK(scale=0.36, delay=0ms)                                  -> STREAM_TICK  (0.8 * 0.45)
+[TICK(0.56), TICK(0.28, delay=60ms)]                                   -> TURN_COMPLETE
+[TICK(0.80), TICK(0.80, delay=90ms), TICK(1.00, delay=90ms)]           -> NEEDS_ATTENTION
+[TICK(0.56), TICK(0.56, delay=70ms)]                                   -> TOOL_START
+```
+
+Check it yourself while the app is doing something:
+
+```bash
+adb shell dumpsys vibrator_manager | sed -n '/Aggregated vibration history/,$p'
+```
+
+**Motion, from the frames rather than the code.** Screen-recorded a navigation, extracted the
+frames, and compared consecutive ones — a transition that is really animated shows a run of
+frames each differing slightly; a cut shows one spike among identical frames. The recorded
+frames show both screens blended at partial opacity for about ten frames (~400 ms) while the
+navigation pill's label grows between states, with the deltas decaying (0.25 → 0.04) as the
+spring settles. Frames outside the transition measure 0.00, so the measurement is picking up
+real change rather than encoder noise.
+
 ## Known gaps
 
 - Clarifying questions, sudo prompts and credential prompts are implemented and unit-tested
   against the gateway's payload shapes, but only the approval card has been driven end to end
   against a real server — reaching `clarify.request` needs an agent that chooses to ask, and
   `sudo.request`/`secret.request` need a host prompt.
-- Haptics are implemented per cue and configurable, but were verified by code path only — an
-  emulator has no vibration motor.
+- Haptics fire for real — the emulator exposes a vibrating device that supports `COMPOSE_EFFECTS`
+  and the `TICK`/`LOW_TICK` primitives, so the platform-level record is checkable. See
+  *Verification* below; what is *not* covered is how they actually feel, which needs a motor.
 - Screenshots above are from a 1080×1920 arm64 emulator running the debug build.
 
 Branching is worth calling out because it looked fine and was not. `session.branch` identifies

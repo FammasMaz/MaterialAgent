@@ -32,50 +32,72 @@ class Haptics(context: Context) {
 
     private val supported: Boolean = vibrator?.hasVibrator() == true
 
+    /**
+     * Effects are built once and reused rather than rebuilt per call.
+     *
+     * This is not a micro-optimisation. `STREAM_TICK` fires once per revealed
+     * chunk while the transcript drains — roughly every 18 ms — and each of
+     * those calls used to allocate a `Composition` builder and a
+     * `VibrationEffect` on the main thread. That is exactly the kind of work
+     * that shows up as a dropped frame halfway through a stream, which is the
+     * worst possible moment for one. There are at most ten cues times four
+     * levels, so the table is bounded and tiny.
+     */
+    private val cueEffects = HashMap<Pair<HapticCue, HapticLevel>, VibrationEffect>()
+    private val tickEffects = HashMap<Int, VibrationEffect>()
+
     /** Plays the pattern for a semantic cue at the user's chosen intensity. */
     fun perform(cue: HapticCue, level: HapticLevel) {
         if (level == HapticLevel.OFF || !supported) return
+        val effect = cueEffects.getOrPut(cue to level) { build(cue, level) }
+        this.vibrator?.vibrate(effect)
+    }
+
+    private fun build(cue: HapticCue, level: HapticLevel): VibrationEffect {
         val s = level.strength()
-        when (cue) {
+        return when (cue) {
             // A single clean tick: "heard you".
-            HapticCue.SENT, HapticCue.TOOL_DONE, HapticCue.INTERRUPTED -> pattern(s, listOf(0L))
+            HapticCue.SENT, HapticCue.TOOL_DONE, HapticCue.INTERRUPTED -> effect(s, listOf(0L))
 
             // Very light: the agent is alive and producing tokens.
-            HapticCue.STREAM_TICK -> pattern(s * 0.45f, listOf(0L))
+            HapticCue.STREAM_TICK -> effect(s * 0.45f, listOf(0L))
 
-            HapticCue.TURN_START -> pattern(s * 0.7f, listOf(0L))
+            HapticCue.TURN_START -> effect(s * 0.7f, listOf(0L))
 
             // A rising double-tap: work has begun on the user's behalf.
-            HapticCue.TOOL_START -> pattern(s * 0.7f, listOf(0L, 70L))
+            HapticCue.TOOL_START -> effect(s * 0.7f, listOf(0L, 70L))
 
             // A distinct triple pulse — the only pattern that means "come back".
-            HapticCue.NEEDS_ATTENTION -> pattern(s, listOf(0L, 90L, 90L), amplitudes = listOf(1f, 1f, 1.3f))
+            HapticCue.NEEDS_ATTENTION -> effect(s, listOf(0L, 90L, 90L), amplitudes = listOf(1f, 1f, 1.3f))
 
             // A small settle: completion should feel like a full stop.
-            HapticCue.TURN_COMPLETE -> pattern(s * 0.7f, listOf(0L, 60L), amplitudes = listOf(1f, 0.5f))
+            HapticCue.TURN_COMPLETE -> effect(s * 0.7f, listOf(0L, 60L), amplitudes = listOf(1f, 0.5f))
 
             // A heavy low thud, unmistakably not-good.
-            HapticCue.TURN_FAILED -> pattern(s, listOf(0L, 80L), amplitudes = listOf(1f, 0.7f), low = true)
+            HapticCue.TURN_FAILED -> effect(s, listOf(0L, 80L), amplitudes = listOf(1f, 0.7f), low = true)
         }
     }
 
     /** Direct, non-semantic feedback for ordinary UI touches. */
     fun tick(intensity: Float = 1f) {
-        pattern(intensity.coerceIn(0.2f, 1f), listOf(0L))
+        if (!supported) return
+        // Quantised so repeated taps at slightly different pressures share one
+        // cached effect instead of building a new one each time.
+        val bucket = ((intensity.coerceIn(0.2f, 1f) * 20f).roundToInt())
+        val effect = tickEffects.getOrPut(bucket) { effect(bucket / 20f, listOf(0L)) }
+        this.vibrator?.vibrate(effect)
     }
 
     /**
      * Emits one pulse per entry in [delaysMs]; each delay is the gap *before*
      * that pulse. [amplitudes] scales individual pulses relative to [scale].
      */
-    private fun pattern(
+    private fun effect(
         scale: Float,
         delaysMs: List<Long>,
         amplitudes: List<Float> = emptyList(),
         low: Boolean = false,
-    ) {
-        val vibrator = this.vibrator ?: return
-        if (!supported) return
+    ): VibrationEffect {
         val amplitudeFor: (Int) -> Float = { index ->
             val relative = amplitudes.getOrNull(index) ?: 1f
             (scale.coerceIn(0.15f, 1f) * relative).coerceIn(0.15f, 1f)
@@ -95,8 +117,7 @@ class Haptics(context: Context) {
                     delay.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt(),
                 )
             }
-            vibrator.vibrate(composition.compose())
-            return
+            return composition.compose()
         }
 
         // Pre-S fallback: the same rhythm as a silence/pulse waveform. Each
@@ -109,7 +130,7 @@ class Haptics(context: Context) {
             timings[index * 2 + 1] = PULSE_MS
             levels[index * 2 + 1] = (amplitudeFor(index) * 255f).roundToInt()
         }
-        vibrator.vibrate(VibrationEffect.createWaveform(timings, levels, -1))
+        return VibrationEffect.createWaveform(timings, levels, -1)
     }
 
     private val PULSE_MS = 18L
