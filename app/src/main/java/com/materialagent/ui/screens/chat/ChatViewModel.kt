@@ -20,8 +20,6 @@ import kotlinx.coroutines.launch
  */
 class ChatViewModel(
     private val container: AppContainer,
-    private val storedSessionId: String?,
-    private val title: String = "",
 ) : ViewModel() {
 
     val transcript: StateFlow<ChatTranscript> = container.chat.transcript
@@ -42,20 +40,23 @@ class ChatViewModel(
     private val _statusText = MutableStateFlow<String?>(null)
     val statusText: StateFlow<String?> = _statusText.asStateFlow()
 
-    init {
+    /**
+     * Opens [storedId] when the route's session argument points somewhere else
+     * than what is on screen.
+     *
+     * This is driven from the screen's `storedId` rather than from `init`
+     * because branching navigates to a sibling conversation at the same
+     * destination: the navigation is single-top, so this screen's ViewModel is
+     * reused and an init-time resume would never run again.
+     */
+    fun openIfNeeded(storedId: String?, title: String?) {
+        if (storedId == null) return
+        val current = container.chat.transcript.value
+        // Already showing it — re-resuming would throw away a live turn.
+        if (current.sessionId != null && current.storedSessionId == storedId) return
         viewModelScope.launch {
-            val alreadyOpen = container.chat.transcript.value.sessionId
-            // Re-entering the same conversation (e.g. after rotation) must not
-            // re-resume and throw away the live turn.
-            if (alreadyOpen != null &&
-                container.chat.transcript.value.storedSessionId == storedSessionId
-            ) {
-                return@launch
-            }
-            if (storedSessionId != null) {
-                container.chat.resume(storedSessionId, titleHint = title).onFailure { error ->
-                    _notice.value = error.message ?: "Could not open that conversation"
-                }
+            container.chat.resume(storedId, titleHint = title).onFailure { error ->
+                _notice.value = error.message ?: "Could not open that conversation"
             }
         }
     }
@@ -125,9 +126,20 @@ class ChatViewModel(
     fun setFast(enabled: Boolean) = configure { container.chat.setFast(enabled) }
 
     fun branch(onCreated: (String) -> Unit) {
-        val id = transcript.value.storedSessionId ?: return
+        // `session.branch` identifies an open session by its runtime id, which is
+        // the only id this conversation reliably has — `session.resume` does not
+        // return the stored one. Previously this required the stored id and so
+        // returned silently without doing anything.
+        val runtime = transcript.value.sessionId
+        val stored = transcript.value.storedSessionId
+        if (runtime == null && stored == null) return
         viewModelScope.launch {
-            container.sessions.branch(id).fold(
+            val result = if (runtime != null) {
+                container.sessions.branchOpenSession(runtime)
+            } else {
+                container.sessions.branchStoredSession(stored!!)
+            }
+            result.fold(
                 onSuccess = { created -> onCreated(created.storedSessionId ?: created.sessionId) },
                 onFailure = { _notice.value = it.message ?: "Could not branch this conversation" },
             )

@@ -103,7 +103,7 @@ class SessionsViewModel(private val container: AppContainer) : ViewModel() {
     fun branch(id: String, onCreated: (String) -> Unit) {
         viewModelScope.launch {
             _busyId.value = id
-            container.sessions.branch(id).fold(
+            container.sessions.branchStoredSession(id).fold(
                 onSuccess = { created ->
                     container.sessions.refresh()
                     onCreated(created.storedSessionId ?: created.sessionId)

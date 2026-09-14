@@ -103,6 +103,139 @@ class HermesLiveTest {
         }
     }
 
+    /**
+     * Pins the branch contract, which is not the shape it looks like.
+     *
+     * `session.branch` identifies its source by the **runtime** id from
+     * `session.create`/`session.resume`, and answers "session not found" (4001)
+     * for the stored id that `session.list` shows and that every other session
+     * method accepts. The app shipped branching against the stored id and it
+     * silently did nothing on a real server, so the negative case is asserted
+     * here too — if the gateway ever starts accepting stored ids this test fails
+     * and the extra `session.resume` round trip can be deleted.
+     */
+    @Test(timeout = 360_000)
+    fun branchNeedsTheRuntimeSessionId() {
+        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        assumeTrue(
+            "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
+            gatewayReachable(wsUrl),
+        )
+
+        val http = OkHttpClient.Builder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(http, scope)
+        val transcript = StringBuilder()
+        fun note(line: String) {
+            transcript.appendLine(line)
+        }
+
+        var runtime: String? = null
+        var stored: String? = null
+        var branchStored: String? = null
+        var branchRuntime: String? = null
+        try {
+            runBlocking {
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+
+                val created = client.request(
+                    "session.create",
+                    buildJsonObject {
+                        put("source", JsonPrimitive("mobile"))
+                        put("title", JsonPrimitive("MaterialAgent branch test"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                runtime = created.str("session_id").orEmpty()
+                stored = created.str("stored_session_id").orEmpty()
+                note("source     runtime=$runtime stored=$stored")
+                assertTrue("source session needs a runtime id", runtime.orEmpty().isNotBlank())
+                assertTrue("source session needs a stored id", stored.orEmpty().isNotBlank())
+
+                // A session is only persisted once a turn completes, so branch
+                // from a conversation with something in it.
+                client.request(
+                    "prompt.submit",
+                    buildJsonObject {
+                        put("session_id", JsonPrimitive(runtime))
+                        put("text", JsonPrimitive("Reply with exactly the word: branched"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                assertNotNull(
+                    "the seeded turn must finish before branching",
+                    awaitSessionInList(client, stored.orEmpty(), LIST_TIMEOUT_MS, ::note),
+                )
+
+                // The stored id is what the app has for a row it has not opened.
+                val viaStored = runCatching {
+                    client.request("session.branch", idParams(stored.orEmpty()), timeoutMs = REQUEST_TIMEOUT_MS)
+                }
+                val storedFailure = viaStored.exceptionOrNull()
+                note("branch(stored) -> ${if (viaStored.isSuccess) "accepted" else describe(storedFailure)}")
+                assertNotNull(
+                    "branching by stored id is expected to be rejected (4001); " +
+                        "if this now succeeds the resume-first workaround can go",
+                    storedFailure,
+                )
+
+                // ...and the runtime id is what actually works.
+                val branched = client.request("session.branch", idParams(runtime), timeoutMs = REQUEST_TIMEOUT_MS)
+                branchStored = branched.str("stored_session_id")
+                branchRuntime = branched.str("session_id")
+                note(
+                    "branch(runtime) -> runtime=${branched.str("session_id")} " +
+                        "stored=$branchStored messages=${branched.num("message_count")}",
+                )
+                assertTrue(
+                    "a branch must be its own stored session",
+                    !branchStored.isNullOrBlank() && branchStored != stored,
+                )
+                // How much history a branch carries is the gateway's call — it
+                // forks at a point in the conversation — so the depth is recorded
+                // as evidence rather than asserted at a magic number. What the app
+                // needs is the branch response's *messages* shape, since the new
+                // conversation is opened from the stored id it just received.
+                note(
+                    "branch     message_count=${branched.num("message_count") ?: "<absent>"} " +
+                        "messages=${branched.arr("messages")?.size ?: 0} " +
+                        "parent=${branched.str("parent") ?: "<absent>"}",
+                )
+                val reopened = client.request(
+                    "session.resume",
+                    idParams(branchStored.orEmpty()),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note(
+                    "reopened   runtime=${reopened.str("session_id")} " +
+                        "rows=${reopened.arr("messages")?.size ?: 0} " +
+                        "title=${reopened.obj("info")?.str("title") ?: "<absent>"}",
+                )
+                assertTrue(
+                    "a branch the app just created must be openable by its stored id",
+                    !reopened.str("session_id").isNullOrBlank(),
+                )
+            }
+        } finally {
+            if (branchRuntime != null || branchStored != null) {
+                runBlocking {
+                    cleanup(client, branchRuntime, branchStored, ::note)
+                    cleanup(client, runtime, stored, ::note)
+                }
+            }
+            client.disconnect("branch test finished")
+            scope.cancel()
+            println("──────── hermes branch run ────────")
+            print(transcript)
+            println("───────────────────────────────────")
+        }
+    }
+
     // ── The turn ────────────────────────────────────────────────────────────
 
     private suspend fun driveTurn(client: HermesClient, wsUrl: String, note: (String) -> Unit) {
@@ -383,6 +516,9 @@ class HermesLiveTest {
         assertTrue("every parsed session needs a non-blank id", parsed.all { it.id.isNotBlank() })
         return parsed
     }
+
+    /** Reads a numeric field off a payload that may or may not carry it. */
+    private fun JsonObject.num(key: String): Int? = int(key)
 
     private fun idParams(sessionId: String): JsonObject = buildJsonObject {
         put("session_id", JsonPrimitive(sessionId))

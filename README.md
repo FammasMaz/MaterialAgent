@@ -98,6 +98,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   been seen on screen.
 - Haptics are implemented per cue and configurable, but were verified by code path only — an
   emulator has no vibration motor.
-- Branching a conversation is wired to `session.branch` and reachable from the row menu, but
-  only the menu itself has been verified by hand.
 - Screenshots above are from a 1080×1920 arm64 emulator running the debug build.
+
+Branching is worth calling out because it looked fine and was not. `session.branch` identifies
+its source by the **runtime** id, and answers `4001 session not found` for the stored id that
+`session.list` shows and every other session method accepts — so branching from a row (which
+only knows the stored id) has to resume the session first, and a conversation that is already
+open has to branch by its runtime id. The screen also had to be told to re-open the new
+argument, because branching navigates to a sibling conversation at the same destination and the
+navigation is single-top, so the ViewModel is reused. Both paths are now exercised by hand
+*and* pinned by `HermesLiveTest.branchNeedsTheRuntimeSessionId`, which asserts the 4001 for the
+stored id so the extra round trip can't be "simplified" away.

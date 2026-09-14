@@ -124,7 +124,7 @@ fun ChatScreen(
     onSwitchTo: (String) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val viewModel = containerViewModel { ChatViewModel(it, storedId) }
+    val viewModel = containerViewModel { ChatViewModel(it) }
     val cue = rememberCue()
     val transcript by viewModel.transcript.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
@@ -136,6 +136,10 @@ fun ChatScreen(
     val showReasoning = LocalShowReasoning.current
     val showTools = LocalShowToolCalls.current
     val streamingHaptics = LocalStreamingHaptics.current
+
+    // Keeps the screen pointed at whatever session the route names, including a
+    // switch to a freshly branched sibling that lands on this same destination.
+    LaunchedEffect(storedId) { viewModel.openIfNeeded(storedId, title = null) }
 
     val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }

@@ -154,16 +154,42 @@ class SessionRepository(
         },
     ).map { }
 
-    suspend fun branch(sessionId: String): Result<CreatedSession> = connection.send(
-        "session.branch",
-        buildJsonObject { put("session_id", JsonPrimitive(sessionId)) },
-        timeoutMs = 60_000,
-    ).map { payload ->
-        CreatedSession(
-            sessionId = payload.str("session_id").orEmpty(),
-            storedSessionId = payload.str("stored_session_id"),
-            info = SessionInfo.from(payload.obj("info")),
+    /**
+     * Branches a conversation that is open in the gateway right now.
+     *
+     * `session.branch` identifies its source by the *runtime* id, and answers
+     * "session not found" (4001) for the stored id from `session.list`. There
+     * are two ways to have a runtime id, so there are two functions rather than
+     * one taking both — a single call with two same-typed nullable ids is too
+     * easy to get backwards.
+     */
+    suspend fun branchOpenSession(runtimeSessionId: String): Result<CreatedSession> =
+        branchRequest(runtimeSessionId)
+
+    /**
+     * Branches a conversation known only by the stored id from `session.list`,
+     * opening it first to learn its runtime id. Note that `session.resume` does
+     * not echo `stored_session_id`, so this is the only way a list row can
+     * branch.
+     */
+    suspend fun branchStoredSession(storedSessionId: String): Result<CreatedSession> =
+        resume(storedSessionId).fold(
+            onSuccess = { branchRequest(it.sessionId) },
+            onFailure = { Result.failure(it) },
         )
+
+    private suspend fun branchRequest(runtimeSessionId: String): Result<CreatedSession> {
+        return connection.send(
+            "session.branch",
+            buildJsonObject { put("session_id", JsonPrimitive(runtimeSessionId)) },
+            timeoutMs = 60_000,
+        ).map { payload ->
+            CreatedSession(
+                sessionId = payload.str("session_id").orEmpty(),
+                storedSessionId = payload.str("stored_session_id"),
+                info = SessionInfo.from(payload.obj("info")),
+            )
+        }
     }
 
     suspend fun close(sessionId: String): Result<Unit> = connection.send(
