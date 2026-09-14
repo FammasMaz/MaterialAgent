@@ -55,7 +55,8 @@ The design system is centralised rather than sprinkled: `Color.kt`, `Type.kt`, `
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
 ./gradlew :app:assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # 57 JVM tests, no device needed
+./gradlew :app:testDebugUnitTest      # 61 JVM tests (the live ones skip themselves
+                                      # unless a gateway is listening)
 ```
 
 Minimum SDK 26, compile and target SDK 36, Kotlin 2.3.0, AGP 8.7.3, Compose BOM 2024.12.01,
@@ -74,7 +75,15 @@ HERMES_TEST_WS='ws://127.0.0.1:19119/api/ws?token=<devtoken>' \
 
 It connects, lists sessions, creates one, sends a turn, waits for `message.delta` and the
 authoritative `message.complete`, parses usage, confirms the session persisted, reads history
-rows, then closes and deletes it.
+rows, then closes and deletes it. Four live tests now run against a real server, each pinning a
+shape that is easy to get wrong:
+
+| Test | What it pins |
+|---|---|
+| `realGatewayTurnRoundTrip` | the whole turn lifecycle, plus the persisted-session and event-shape contracts |
+| `branchNeedsTheRuntimeSessionId` | `session.branch` rejects the stored id with `4001`, so a row has to resume first |
+| `approvalResponseUsesTheServersParameterNames` | a real Tier-2 approval: the card's payload, the `approval.respond` parameter names, and that a granted `once` actually runs the command |
+| `runtimeIdSurvivesASocketDrop` | a dropped socket does not invalidate the runtime id, so session-scoped calls stay valid after a reconnect |
 
 For the emulator, forward the same port and rebuild:
 
@@ -91,11 +100,36 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
   ignored silently).
 - `docs/PLAN.md` — product surfaces, the design-system plan, and the execution order.
 
+## Approvals
+
+A destructive shell command is the one place the agent stops and asks, and the card that asks has
+to be exactly right — the tool is blocked until it is answered. It was wrong in three ways at once:
+
+- The gateway names its allowed answers in the `approval.request` payload (`once`, `session`,
+  `always`, `deny`, with `always` simply absent when policy forbids it). The reducer dropped them,
+  so the card rendered as a bare text field with no way to approve.
+- Every interaction method reads a **different** parameter, and falls back to a default when the
+  key is missing — `approval.respond` reads `choice` and would otherwise resolve as `"deny"`,
+  `clarify.respond` reads `answer`, `sudo.respond` reads `password`, `secret.respond` reads
+  `value`. The app sent one shared `"response"` field, so approvals reached the server, matched
+  nothing, and quietly denied themselves while the buttons looked like they worked.
+- An unanswered approval is failed closed by the gateway (it timed out after 60s here and the
+  tool returned "blocked"). The card kept showing "Waiting" with live buttons afterwards, offering
+  an action that no longer existed.
+
+All three are fixed: the choices drive the buttons (`Allow once` / `Allow for this session` /
+`Always allow` / a quieter `Deny`, with the server's own token sent back), each method sends the
+parameters its server counterpart reads (`InteractionParams`), and a turn ending retires whatever
+is still unanswered. The whole path is verified rather than assumed — pressing **Allow once** in
+the emulator made `rm -rf /tmp/probe-dir` actually run (the directory was gone when checked on the
+server), and the denial path left it in place.
+
 ## Known gaps
 
-- Approval and clarifying-question cards are implemented and unit-tested, but the reference
-  server's default tool set never asked for approval during manual testing, so they have not
-  been seen on screen.
+- Clarifying questions, sudo prompts and credential prompts are implemented and unit-tested
+  against the gateway's payload shapes, but only the approval card has been driven end to end
+  against a real server — reaching `clarify.request` needs an agent that chooses to ask, and
+  `sudo.request`/`secret.request` need a host prompt.
 - Haptics are implemented per cue and configurable, but were verified by code path only — an
   emulator has no vibration motor.
 - Screenshots above are from a 1080×1920 arm64 emulator running the debug build.
@@ -109,3 +143,10 @@ argument, because branching navigates to a sibling conversation at the same dest
 navigation is single-top, so the ViewModel is reused. Both paths are now exercised by hand
 *and* pinned by `HermesLiveTest.branchNeedsTheRuntimeSessionId`, which asserts the 4001 for the
 stored id so the extra round trip can't be "simplified" away.
+
+Session-scoped calls are guarded separately: `ChatController.withLiveSession` retries once through
+`session.resume` when a call answers `4001`, so a runtime id that has gone stale (one was observed
+after a reconnect plus relaunch) recovers instead of failing the turn. It is deliberately narrow —
+only `4001`, only one retry, and the original failure is returned if the resume does not help. A
+socket drop on its own does *not* invalidate the runtime id; `HermesLiveTest.runtimeIdSurvivesASocketDrop`
+pins that so the guard is not mistaken for the explanation.

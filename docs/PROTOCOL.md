@@ -132,7 +132,12 @@ handles both, and exposes a setting that turns `display.tool_progress` on via
 `session.history{session_id}` → `{count, messages}` ·
 `session.activate` · `session.close` → `{closed:true}` ·
 `session.delete` (active session must be closed first) ·
-`session.branch{session_id}` → new session incl. copied `messages` ·
+`session.branch{session_id}` — `session_id` here is the **runtime** id from `session.create`/
+`session.resume`; the stored id that `session.list` shows (and every other method accepts) is
+rejected with `4001 session not found`, so a list-only session must be resumed first. The fork
+happens at the last user message — that reply is *not* carried over, the title becomes
+`"<source title> #2"`, and the new session records `parent` = source stored id.
+Returns the new session incl. copied `messages` ·
 `session.title{session_id,title}` → `{pending,title}` ·
 `session.interrupt` → `{status:"interrupted"}` ·
 `session.steer{session_id,text}` · `session.undo` · `session.set_hidden` ·
@@ -140,11 +145,35 @@ handles both, and exposes a setting that turns `display.tool_progress` on via
 `session.usage` → usage object · `session.status` → `{output}` (human text) ·
 `session.events.since{session_id,last_seen}` → `{events:[…], epoch}`.
 
-**Turns** `prompt.submit{session_id,text}` → `{status:"streaming"}` ·
+**Turns** `prompt.submit{session_id,text}` → `{status:"streaming"}` — the runtime id is **stable
+across a socket drop**: a turn submitted on the pre-reconnect id is accepted, and `session.resume`
+hands back the same id (pinned by `HermesLiveTest.runtimeIdSurvivesASocketDrop`) ·
 `prompt.background` · `prompt.btw`.
 
-**Interactions** `approval.pending` · `approval.respond{request_id,…}` ·
-`clarify.respond` · `sudo.respond` · `secret.respond`.
+**Interactions** `approval.pending` · `approval.respond{session_id,request_id,choice}` ·
+`clarify.respond{request_id,answer}` · `sudo.respond{request_id,password}` ·
+`secret.respond{request_id,value}`.
+
+Each method reads a **different** key and *falls back to a default when it is missing* — a call
+with the wrong key succeeds and means the wrong thing. `approval.respond` defaults to `deny`,
+`clarify.respond` to an empty answer. Only `approval.respond` resolves its session explicitly;
+the others find it through the gateway's pending-request registry. Send exactly these shapes
+(verified live, see `HermesLiveTest.approvalResponseUsesTheServersParameterNames`).
+
+`approval.request` carries the allowed answers in `choices`, and `always` is **absent** when the
+policy forbids a permanent allow:
+
+```json
+{"type":"approval.request",
+ "payload":{"request_id":"…","description":"delete in root path",
+            "command":"rm -rf /tmp/probe-dir","session_key":"…",
+            "choices":["once","session","always","deny"]}}
+```
+
+An unanswered approval is **failed closed**: it timed out after ~60 s here, the tool returned
+"blocked", and the turn ended normally — `responded` came back as `{"resolved":1}` (an integer,
+not `true`) when a choice did arrive, and the response succeeds even for a request whose `choice`
+the gateway ignored. The only proof that a grant was honoured is the tool actually running.
 
 **Capabilities** `model.options` → `{providers:[{slug,name,is_current,models[],capabilities,featured_models}]}` ·
 `model.set` · `tools.list` → `{toolsets:[{name,description,tool_count,enabled,tools[]}]}` ·
