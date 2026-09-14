@@ -339,7 +339,20 @@ class HermesConnection(
             ?.str("name")
     }
 
-    private fun classify(profile: ServerProfile, error: Throwable): ConnectionStatus.Failed {
+    /**
+     * Turns a dial failure into something the UI can say truthfully.
+     *
+     * A plain cancellation is NOT a failure: the attempt was abandoned, usually because
+     * the user left the screen, and there is nothing about the server to report. Treating
+     * it as one produced a "cancelled before it finished" banner that outlived the outage
+     * — a later connect flips the status to Connected, but the banner the UI had already
+     * surfaced stayed on screen above a fully loaded session list. Timeouts are
+     * cancellations too and genuinely are failures, so they keep their own branch below.
+     */
+    internal fun classify(profile: ServerProfile, error: Throwable): ConnectionStatus {
+        if (error is CancellationException && error !is TimeoutCancellationException) {
+            return ConnectionStatus.Idle
+        }
         // Order matters: these are all IOExceptions, and the specific ones say
         // something far more useful than "could not reach".
         val message = when (error) {
@@ -362,9 +375,6 @@ class HermesConnection(
                 "${profile.baseUrl} accepted the connection but never finished the " +
                     "handshake. Something between here and the gateway — a proxy, a " +
                     "tunnel, a firewall — is not passing the WebSocket through."
-
-            is CancellationException ->
-                "Connecting to ${profile.baseUrl} was cancelled before it finished."
 
             is HermesTransportException ->
                 error.message ?: "Connection to ${profile.baseUrl} failed."
