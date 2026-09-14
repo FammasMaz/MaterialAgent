@@ -126,16 +126,52 @@ fun MaterialAgentTheme(
 @Composable
 private fun resolveScheme(palette: PaletteMode, dark: Boolean, skin: Skin?): ColorScheme {
     val context = LocalContext.current
-    val supportsDynamic = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    return when {
-        palette == PaletteMode.DYNAMIC && supportsDynamic ->
+    return when (effectivePalette(palette, supportsDynamicColor(), skin != null)) {
+        PaletteMode.DYNAMIC ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
 
-        palette == PaletteMode.HERMES_SKIN && skin != null ->
-            skinScheme(skin.colors, dark) ?: hermesScheme(dark)
+        PaletteMode.HERMES_SKIN ->
+            skin?.let { skinScheme(it.colors, dark) } ?: hermesScheme(dark)
 
-        else -> hermesScheme(dark)
+        PaletteMode.HERMES -> hermesScheme(dark)
     }
+}
+
+/**
+ * The palette actually applied, given what this device and this server can honour.
+ *
+ * Dynamic colour needs API 31, and the server's skin needs a server that sent one,
+ * so the stored preference and the live palette are not the same thing. Resolving
+ * that in one place is what lets Settings highlight the palette in force: it used to
+ * highlight the *stored* one, which meant a device without dynamic colour — or an
+ * app with no skin — showed a choice the app was not wearing.
+ *
+ * One case it cannot see: a skin whose colours fail to parse still falls back to
+ * Hermes, so a corrupt skin payload shows "Server" as active while rendering
+ * Hermes. That is a malformed-payload path, not a capability gap.
+ */
+fun effectivePalette(
+    palette: PaletteMode,
+    dynamicSupported: Boolean,
+    hasSkin: Boolean,
+): PaletteMode = when {
+    palette == PaletteMode.DYNAMIC && !dynamicSupported -> PaletteMode.HERMES
+    palette == PaletteMode.HERMES_SKIN && !hasSkin -> PaletteMode.HERMES
+    else -> palette
+}
+
+/**
+ * The palettes this device can actually wear, in the order Settings offers them.
+ *
+ * Separate from [effectivePalette] on purpose: that one answers "what am I wearing",
+ * this one answers "what may I choose", and the Settings tray needs both. Picking a
+ * palette it must not offer is how the tray used to present "Dynamic" on a device
+ * that cannot honour it — a control that silently does nothing.
+ */
+fun availablePalettes(dynamicSupported: Boolean, hasSkin: Boolean): List<PaletteMode> = buildList {
+    if (dynamicSupported) add(PaletteMode.DYNAMIC)
+    add(PaletteMode.HERMES)
+    if (hasSkin) add(PaletteMode.HERMES_SKIN)
 }
 
 fun hermesScheme(dark: Boolean): ColorScheme = if (dark) HermesDarkScheme else HermesLightScheme

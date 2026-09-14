@@ -74,6 +74,9 @@ import com.materialagent.ui.components.UpdateProgressBar
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalScrollHaptics
+import com.materialagent.ui.theme.availablePalettes
+import com.materialagent.ui.theme.effectivePalette
+import com.materialagent.ui.theme.supportsDynamicColor
 
 /** Appearance, behaviour, server and about — the whole app's knobs. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -148,33 +151,36 @@ fun SettingsScreen(
 
                 SettingsDivider()
 
+                val dynamicColour = supportsDynamicColor()
+                val activePalette = effectivePalette(settings.palette, dynamicColour, skin != null)
+                // Only the palettes this device and this server can actually wear. Dynamic
+                // colour needs API 31 and the server skin needs a server that sent one, so
+                // on a device without dynamic — where the default for a fresh install
+                // silently renders as Hermes — offering "Dynamic" would be a choice that
+                // does nothing. The selected label is the palette in force, not the stored
+                // one, so the tray cannot claim a palette the app is not wearing.
+                val paletteChoices = availablePalettes(dynamicColour, skin != null)
+
                 SettingsRow(
                     icon = Icons.Rounded.Palette,
                     title = "Colour",
-                    subtitle = if (skin != null) {
-                        "Wallpaper colours, Hermes gold, or the server's skin"
-                    } else {
-                        "Wallpaper colours, or the Hermes palette"
+                    subtitle = when {
+                        dynamicColour && skin != null -> "Wallpaper colours, Hermes gold, or the server's skin"
+                        dynamicColour -> "Wallpaper colours, or the Hermes gold palette"
+                        skin != null -> "Hermes gold, or the server's skin"
+                        else -> "Hermes gold — this device cannot take wallpaper colours"
                     },
                 ) {
-                    ChoiceRow(
-                        options = listOf(
-                            "Dynamic" to (settings.palette == PaletteMode.DYNAMIC),
-                            "Hermes" to (settings.palette == PaletteMode.HERMES),
-                            "Server" to (settings.palette == PaletteMode.HERMES_SKIN),
-                        ),
+                    ExpressiveToggleGroup(
+                        options = paletteChoices.map(::paletteLabel),
+                        selectedIndex = paletteChoices
+                            .indexOf(activePalette)
+                            .coerceAtLeast(0),
                         onSelect = { index ->
                             cue(HapticCue.SENT)
-                            app.update {
-                                it.copy(
-                                    palette = when (index) {
-                                        1 -> PaletteMode.HERMES
-                                        2 -> PaletteMode.HERMES_SKIN
-                                        else -> PaletteMode.DYNAMIC
-                                    },
-                                )
-                            }
+                            app.update { it.copy(palette = paletteChoices[index]) }
                         },
+                        fillWidth = true,
                     )
                 }
 
@@ -636,6 +642,13 @@ private fun ChoiceRow(
 
 private fun Modifier.clickableRowCompat(onClick: () -> Unit): Modifier =
     this.then(Modifier.clickable(onClick = onClick))
+
+/** What each palette calls itself in the tray. */
+private fun paletteLabel(mode: PaletteMode): String = when (mode) {
+    PaletteMode.DYNAMIC -> "Dynamic"
+    PaletteMode.HERMES -> "Hermes"
+    PaletteMode.HERMES_SKIN -> "Server"
+}
 
 /**
  * The updater's home in Settings.
