@@ -35,7 +35,7 @@ newest first, on by default and switchable from Settings.
 and sudo prompts read the password field `sudo.respond` actually wants.
 
 **Media both ways.** Incoming: the agent writes `MEDIA:<path>` markers into its prose, the app
-strips them and fetches the file through three authenticated endpoints — `/api/media` (images),
+strips them and fetches the file through three authenticated endpoints: `/api/media` (images),
 `/api/files/stream` (audio, HTTP Range, so seeking works), and `/api/files/download`. Outgoing:
 images go up as `image.attach_bytes`, everything else as `file.attach`, because the gateway has
 no HTTP upload endpoint a chat turn can use. The composer takes images from the system photo
@@ -48,14 +48,14 @@ and filterable, including by capability.
 
 The app talks to a `hermes serve` instance you run. Nothing is bundled or hosted.
 
-1. **Address** — `host:port` of the gateway, e.g. `192.168.1.27:9119` or
+1. **Address:** `host:port` of the gateway, e.g. `192.168.1.27:9119` or
    `http://example.<tailnet>.ts.net:9119`. A path may be included; the client appends `/api/ws`
    to derive the socket URL.
-2. **Auth method** — `Access token` (loopback/dev tokens) or `Password`.
-3. **Credentials** — with `Password`, the app signs in with a **username** and the dashboard
+2. **Auth method:** `Access token` (loopback/dev tokens) or `Password`.
+3. **Credentials:** with `Password`, the app signs in with a **username** and the dashboard
    password, keeps the session cookie, and exchanges it for a **single-use WebSocket ticket**.
    It never puts the password on the socket.
-4. **Nickname** — optional label for saved connections.
+4. **Nickname:** optional label for saved connections.
 
 Auth is not optional on a reachable server: setting `dashboard.public_url` activates
 authentication even when Hermes binds to loopback, and Hermes refuses to start without a
@@ -69,7 +69,7 @@ raw tailnet IP. For local development the alternative is an SSH forward plus `ad
 (see below).
 
 While a connect is in flight the whole form is disabled, so taps and toggles look dead and the
-pixels do not change. That is a *connecting* app, not a frozen one — check with
+pixels do not change. That is a *connecting* app, not a frozen one. Check with
 `uiautomator dump` rather than tapping, and do not press Back mid-connect (it cancels the job
 and leaves a "cancelled before it finished" banner that only Retry clears).
 
@@ -125,7 +125,7 @@ app/src/main/java/com/materialagent/
 
 - **`core/` has no Android dependencies.** The socket, the wire models and the transcript
   reducer are plain Kotlin, so protocol behaviour is unit-testable without Compose or an
-  emulator. This is the single most useful structural decision in the repo.
+  emulator. It is why the protocol suite needs no device.
 - **`HermesConnection` owns credential resolution, socket lifecycle, retry and reconnect
   policy**, so no screen touches the socket. Blocking sign-in work is confined to
   `Dispatchers.IO` there.
@@ -140,13 +140,13 @@ app/src/main/java/com/materialagent/
 Two conventions that exist because the gateway makes them necessary:
 
 - `session.branch`, `session.history`, `prompt.submit`, `session.steer` and `session.interrupt`
-  take the *runtime* id; `session.title` and `session.delete` take the *stored* id. The API
-  surface separates these two namespaces rather than accepting an ambiguous nullable id, and
+  take the *runtime* id; `session.title` and `session.delete` take the *stored* id. The API keeps
+  these two namespaces separate rather than accepting an ambiguous nullable id, and
   `ChatController.withLiveSession` retries once through `session.resume` when a call comes back
   `4001` (or `4007`, which a reconnect can also cause).
-- Every interaction method reads a **different** parameter — `approval.respond` reads `choice`,
-  `clarify.respond` reads `answer`, `sudo.respond` reads `password` — and each falls back to a
-  default when its key is missing. The builders are kept together in `InteractionParams`, one per
+- Every interaction method reads a **different** parameter, and each falls back to a default when
+  its key is missing: `approval.respond` reads `choice`, `clarify.respond` reads `answer`,
+  `sudo.respond` reads `password`. The builders are kept together in `InteractionParams`, one per
   method, precisely because the parameter shapes cannot be shared.
 
 ## Testing
@@ -170,7 +170,7 @@ the update pipeline.
 ```
 
 The test environment is not a declared task input, so Gradle treats the test task as up to date
-after any earlier run — and worse, restores the previous results XML from its build cache. The
+after any earlier run. Worse, it restores the previous results XML from its build cache. The
 suite then reports the last run's `skipped` results as if it had just executed, which is exactly
 what a passing run looks like. Only a forced run, with real per-test durations in
 `app/build/test-results/testDebugUnitTest/*.xml`, is evidence.
@@ -196,7 +196,7 @@ tunnel script deliberately has no default token because a committed credential m
 
 | Live test | What it pins |
 |---|---|
-| `realGatewayTurnRoundTrip` | the whole turn lifecycle — `message.delta` through the authoritative `message.complete`, usage parsing, session persistence, history rows, close and delete |
+| `realGatewayTurnRoundTrip` | the whole turn lifecycle: `message.delta` through the authoritative `message.complete`, usage parsing, session persistence, history rows, close and delete |
 | `attachmentUploadRoundTrip` | the two attach RPCs and the `@file:` reference the client has to put back into the prompt |
 | `branchNeedsTheRuntimeSessionId` | `session.branch` rejects the stored id with `4001`, so a row must resume first |
 | `approvalResponseUsesTheServersParameterNames` | a real approval: the card's payload, the parameter names, and that a granted `once` actually ran the command |
@@ -204,7 +204,7 @@ tunnel script deliberately has no default token because a committed credential m
 | `runtimeIdSurvivesASocketDrop` | a dropped socket does not invalidate the runtime id, so session-scoped calls stay valid after a reconnect |
 | `passwordLoginMintsAWorkingTicket` | password sign-in, cookie retention and ticket exchange against a real server |
 
-Timeouts are generous (6–8 minutes) because these drive a real agent.
+Timeouts are generous, six to eight minutes, because these drive a real agent.
 
 Testing leaves conversations behind, so `scripts/session-cleanup.py` lists them and, with
 `--delete`, removes the ones this project's testing made. It matches an explicit allow-list of
@@ -234,7 +234,7 @@ turns the updater off in one place for any build that must not self-update.
   version.
 - Installing needs the "install unknown apps" grant; the app detects a missing grant and sends
   you to the settings screen, resuming the install on return. `REQUEST_INSTALL_PACKAGES` is
-  declared in the manifest — without it `canRequestPackageInstalls()` throws.
+  declared in the manifest. Without it, `canRequestPackageInstalls()` throws.
 - **Updates require the same signing certificate.** A release signed with a fresh key cannot
   update an existing installation; the beta and release channels are signed with a persistent
   release keystore for this reason. The tag workflow falls back to debug signing when no keystore
@@ -254,8 +254,8 @@ Theme}.kt` plus a shared component kit (`Expressive.kt`, `Surfaces.kt`, `NavBar.
   The helpers in `Motion.kt` are preference-aware, so reduced motion is honoured by construction
   rather than by a flag check at each call site.
 - **Buttons use the M3E morphing overloads.** `shapes = ButtonDefaults.shapes()` and
-  `IconButtonDefaults.shapes()` — passing a `RoundedCornerShape` selects the non-morphing
-  overload and pins a static outline, which silently kills the press shape morph.
+  `IconButtonDefaults.shapes()`. Passing a `RoundedCornerShape` instead selects the
+  non-morphing overload and pins a static outline, which silently kills the press shape morph.
 - **Haptics are semantic, not amplitudes.** A `HapticCue` maps to the right API level for the
   device, the intensity is a user setting, and the vocabulary distinguishes a tap, a detent, a
   refresh gesture and a destructive confirm. Incoming text and scroll feedback have their own
@@ -291,7 +291,7 @@ the full list.
 
 ## Verification
 
-What has been checked, and how — because "it builds" is not the same claim as "it works".
+What has been checked, and how. "It builds" is not the same claim as "it works".
 
 **Transport and the agent loop.** The JVM suite passes with no failures; the seven live tests run
 against a real gateway through the SSH tunnel, including a granted approval proven to have run
@@ -350,10 +350,10 @@ states, with deltas decaying (0.25 → 0.04) as the spring settles, and 0.00 out
 
 ## Docs
 
-- [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the gateway protocol as verified against a live
+- [`docs/PROTOCOL.md`](docs/PROTOCOL.md): the gateway protocol as verified against a live
   server, including the behaviours that are not obvious from reading it.
-- [`docs/PLAN.md`](docs/PLAN.md) — product surfaces, the design-system plan, and the execution
+- [`docs/PLAN.md`](docs/PLAN.md): product surfaces, the design-system plan, and the execution
   order.
-- [`scripts/tunnel.sh`](scripts/tunnel.sh) — the SSH forward the live tests want.
-- [`scripts/session-cleanup.py`](scripts/session-cleanup.py) — removes the sessions testing left
+- [`scripts/tunnel.sh`](scripts/tunnel.sh): the SSH forward the live tests want.
+- [`scripts/session-cleanup.py`](scripts/session-cleanup.py): removes the sessions testing left
   behind, by allow-list.
