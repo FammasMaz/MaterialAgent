@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /*
@@ -163,7 +164,15 @@ fun MetaPill(
                 Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(5.dp))
             }
-            Text(text = text, style = MaterialTheme.typography.labelMedium)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                // A pill is a fixed one-line token. Server-supplied model names run
+                // long (`deepseek-v3.2-exp-thinking`), and without this the text
+                // wrapped inside the pill and grew it to two or three lines high.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

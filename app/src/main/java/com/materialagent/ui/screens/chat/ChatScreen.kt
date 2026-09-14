@@ -474,7 +474,14 @@ private fun ChatTopBar(
                         )
                     }
                     entry?.model?.let { model ->
-                        MetaPill(text = model.substringAfterLast('/'))
+                        // The model name is the one token here that can be arbitrarily
+                        // long, and this row has no room to grow: let it take what is
+                        // left and ellipsize rather than push the other pills past the
+                        // header's edge.
+                        MetaPill(
+                            text = model.substringAfterLast('/'),
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
                     }
                     // The effort pill is the least informative of the three and
                     // the header only has room for so much; while a turn runs it
@@ -602,7 +609,12 @@ private fun Composer(
         tonalElevation = 2.dp,
     ) {
         Row(
-            modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+            // The trailing control is a 48dp disc, and the composer's corners are cut
+            // at 26dp, so the arc is 9.5dp deep at the disc's own height. With the
+            // old 6dp end padding the disc's bottom edge (6dp up) sat inside that
+            // arc, which is why it read as crammed into the corner; 10dp clears the
+            // arc on both axes and lifts the disc's centre to the bar's centre.
+            modifier = Modifier.padding(start = 6.dp, end = 10.dp, top = 6.dp, bottom = 10.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             TextField(
