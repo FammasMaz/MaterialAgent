@@ -45,6 +45,15 @@ class UpdateManager(
     private val api: GitHubReleaseApiClient,
     private val client: OkHttpClient,
     private val scope: CoroutineScope,
+    /**
+     * Defaulted rather than injected so the container stays a list of plain
+     * singletons: the verifier is a pure function of the platform, with nothing
+     * for a test to substitute at this level.
+     */
+    private val verifier: ApkVerifier = ApkVerifier(
+        inspector = PackageManagerApkInspector(context),
+        expectedApplicationId = BuildConfig.APPLICATION_ID,
+    ),
 ) {
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -123,6 +132,10 @@ class UpdateManager(
      * A device without the "install unknown apps" grant is sent to that system
      * setting first, and the install resumes on return — an updater that quietly
      * does nothing after a permission round-trip reads as broken.
+     *
+     * [UpdateState.ReadyToInstall] is unreachable except through [fetchApk], which
+     * verifies the file before publishing that state, so nothing here needs to
+     * re-hash it. The two paths into [launchInstaller] both start from that state.
      */
     fun install() {
         if (!BuildConfig.EXTERNAL_UPDATES_ENABLED) return
@@ -179,6 +192,16 @@ class UpdateManager(
     }
 
     private suspend fun fetchApk(update: AppUpdate): File = withContext(Dispatchers.IO) {
+        // Pinned before a byte moves: releases come from GitHub, so an asset URL
+        // pointing anywhere else is not one of ours no matter who served it.
+        if (!ReleaseHosts.allows(update.downloadUrl)) {
+            throw IOException(
+                "Refusing to download an update from " +
+                    "${ReleaseHosts.hostOf(update.downloadUrl) ?: "an unknown host"}: " +
+                    "releases are published on GitHub only.",
+            )
+        }
+
         updateDir.mkdirs()
         // A previous release's APK is never reused — it is already installed or
         // superseded — so it only costs cache space while it sits there.
@@ -190,6 +213,15 @@ class UpdateManager(
         val request = Request.Builder().url(update.downloadUrl).build()
 
         client.newCall(request).execute().use { response ->
+            // The first URL is GitHub's, but the response may have been redirected
+            // — GitHub serves large assets from a CDN host of its own. Checking
+            // where the bytes actually came from is what makes the pin real.
+            if (!ReleaseHosts.allows(response.request.url.toString())) {
+                throw IOException(
+                    "The update download was redirected to ${response.request.url.host}, " +
+                        "which is not a GitHub host. It was discarded.",
+                )
+            }
             if (!response.isSuccessful) throw IOException("Download failed: HTTP ${response.code}")
             val body = response.body ?: throw IOException("Download returned no body")
             val total = body.contentLength()
@@ -218,6 +250,15 @@ class UpdateManager(
                     }
                 }
             }
+        }
+
+        // The file exists but is not yet an update: it becomes one only if it is
+        // the bytes the release published, for this app, signed by this app's key.
+        try {
+            verifier.verify(target, update.sha256)
+        } catch (failure: ApkVerificationException) {
+            target.delete()
+            throw failure
         }
         target
     }

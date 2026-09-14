@@ -143,6 +143,11 @@ jobs:
           echo "name=$(basename "$OUT")" >> "$GITHUB_OUTPUT"
           SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          # The same bytes are published twice: as a `<apk>.sha256` asset the app
+          # can fetch and parse without reading prose, and in the release body as
+          # the fallback. Both are written here, next to the hash itself.
+          echo "$SHA  $(basename "$OUT")" > "$OUT.sha256"
+          echo "shasum=$OUT.sha256" >> "$GITHUB_OUTPUT"
           echo "$SHA"
 
       - name: Commit the version bump
@@ -188,7 +193,9 @@ jobs:
             ```
             SHA256: ${{ steps.apk.outputs.sha }}
             ```
-          files: ${{ steps.apk.outputs.path }}
+          files: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.shasum }}
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,6 +17,18 @@ data class AppUpdate(
     val publishedAt: String,
     /** True for a beta or release candidate, so the UI can say so instead of "update". */
     val isPreRelease: Boolean = false,
+    /**
+     * The SHA-256 the release published for [downloadUrl], or null when it
+     * published none. A null here is not "skip the check": the download is
+     * refused, because an unverifiable APK is one nobody can vouch for.
+     */
+    val sha256: String? = null,
+    /**
+     * `browser_download_url` of the `<apk>.sha256` asset, when the release has
+     * one. The workflow writes that asset in the same step that hashes the file,
+     * so it is preferred over the digest quoted in the release body.
+     */
+    val sha256Url: String? = null,
 )
 
 /**

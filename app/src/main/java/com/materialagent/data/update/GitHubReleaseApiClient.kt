@@ -24,6 +24,14 @@ import okhttp3.Request
 class GitHubReleaseApiClient(
     private val client: OkHttpClient,
     private val json: Json = HermesJson,
+    /** Overridable so the release parsing can be exercised against a stub server. */
+    private val releasesUrl: String = RELEASES_URL,
+    /**
+     * Host policy for the checksum asset. Injected so the resolution can be
+     * exercised against a local server; production passes [ReleaseHosts], and the
+     * download itself is pinned there regardless of what is passed here.
+     */
+    private val allowsAssetHost: (String?) -> Boolean = ReleaseHosts::allows,
 ) {
 
     /**
@@ -34,7 +42,7 @@ class GitHubReleaseApiClient(
      */
     suspend fun fetchLatest(): Result<AppUpdate> = withContext(Dispatchers.IO) {
         try {
-            Result.success(fetch())
+            Result.success(resolveDigest(fetch()))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -44,7 +52,7 @@ class GitHubReleaseApiClient(
 
     private fun fetch(): AppUpdate {
         val request = Request.Builder()
-            .url(RELEASES_URL)
+            .url(releasesUrl)
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .get()
@@ -75,28 +83,67 @@ class GitHubReleaseApiClient(
                 ?: return@mapNotNull null
             val versionName = tag.removePrefix("v").removePrefix("V")
             if (VersionComparison.versionCode(versionName) <= 0) return@mapNotNull null
-            val apk = release["assets"]?.jsonArray
-                ?.map { it.jsonObject }
-                ?.firstOrNull { it["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true }
+            val assets = release["assets"]?.jsonArray?.map { it.jsonObject }.orEmpty()
+            val apk = assets
+                .firstOrNull { it["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true }
                 ?: return@mapNotNull null
+            val assetName = apk["name"]?.jsonPrimitive?.content.orEmpty()
             val downloadUrl = apk["browser_download_url"]?.jsonPrimitive?.content
                 ?.takeIf { it.isNotBlank() }
                 ?: return@mapNotNull null
+            // The checksum is published twice: as a `<apk>.sha256` asset, and in
+            // the body under `SHA256:`. Both come from the same workflow step, so
+            // either is authoritative — the asset is preferred only because it is
+            // parseable without reading prose.
+            val sha256Url = assets
+                .firstOrNull { it["name"]?.jsonPrimitive?.content == "$assetName.sha256" }
+                ?.get("browser_download_url")?.jsonPrimitive?.content
+                ?.takeIf { it.isNotBlank() }
             AppUpdate(
                 versionName = versionName,
                 versionCode = VersionComparison.versionCode(versionName),
                 releaseName = release["name"]?.jsonPrimitive?.content.orEmpty(),
                 releaseNotes = release["body"]?.jsonPrimitive?.content.orEmpty(),
                 downloadUrl = downloadUrl,
-                assetName = apk["name"]?.jsonPrimitive?.content.orEmpty(),
+                assetName = assetName,
                 assetSize = apk["size"]?.jsonPrimitive?.long ?: 0L,
                 publishedAt = release["published_at"]?.jsonPrimitive?.content.orEmpty(),
                 isPreRelease = release["prerelease"]?.jsonPrimitive?.content?.toBoolean() ?: false,
+                sha256 = Sha256.parse(release["body"]?.jsonPrimitive?.content),
+                sha256Url = sha256Url,
             )
         }
         return candidates.maxWithOrNull { a, b ->
             VersionComparison.compare(a.versionName, b.versionName) ?: 0
         } ?: throw GitHubReleaseException("No release with an APK attached was found")
+    }
+
+    /**
+     * Replaces the digest with the one from the `<apk>.sha256` asset when there
+     * is one, leaving the body digest in place as the fallback.
+     *
+     * A failure here is not fatal: the digest already parsed from the body still
+     * verifies the download, and the file is checked against it later either way.
+     */
+    private fun resolveDigest(update: AppUpdate): AppUpdate {
+        val assetUrl = update.sha256Url
+        if (assetUrl == null || !allowsAssetHost(assetUrl)) return update
+        val fromAsset = runCatching { downloadText(assetUrl) }.getOrNull()?.let(Sha256::parse)
+        return if (fromAsset == null) update else update.copy(sha256 = fromAsset)
+    }
+
+    private fun downloadText(url: String): String {
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "application/octet-stream")
+            .get()
+            .build()
+        return client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw GitHubReleaseException("Checksum download failed: HTTP ${response.code}")
+            }
+            response.body?.string().orEmpty()
+        }
     }
 
     private companion object {
