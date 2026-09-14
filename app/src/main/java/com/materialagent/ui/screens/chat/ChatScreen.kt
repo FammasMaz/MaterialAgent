@@ -8,6 +8,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -24,7 +26,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -36,8 +40,10 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tune
@@ -52,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -640,6 +647,13 @@ private fun Composer(
 
 private enum class ComposerAction { SEND, STEER, STOP }
 
+/** One row of the model picker: `qualified` is what gets sent to the server. */
+private data class ModelChoice(
+    val qualified: String,
+    val model: String,
+    val provider: String,
+)
+
 /** Models, reasoning effort and the fast tier — all per session. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -674,22 +688,84 @@ private fun ModelPickerSheet(
                 )
             }
 
-            providers.forEach { provider ->
-                provider.models.forEach { model ->
-                    val qualified = "${provider.slug}/$model"
-                    ListItem(
-                        headlineContent = { Text(model) },
-                        supportingContent = { Text(provider.name.ifBlank { provider.slug }) },
-                        trailingContent = {
-                            if (current == model || current == qualified) {
-                                MetaPill(
-                                    text = "Current",
-                                    container = MaterialTheme.colorScheme.primaryContainer,
-                                    content = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                        },
-                        modifier = Modifier.clickable { onPick(qualified) },
+            // A busy server advertises well over a thousand models. A flat column
+            // of them would be both slow to compose and would push the Reasoning
+            // section past the bottom of the sheet, so this is a search box over a
+            // height-bounded lazy list, with the unfiltered view capped to a short
+            // first page.
+            var query by remember { mutableStateOf("") }
+            val all = remember(providers) {
+                providers.flatMap { provider ->
+                    val providerName = provider.name.ifBlank { provider.slug }
+                    provider.models.map { model ->
+                        ModelChoice("${provider.slug}/$model", model, providerName)
+                    }
+                }
+            }
+            val matches = remember(query, all) {
+                val needle = query.trim().lowercase()
+                if (needle.isEmpty()) {
+                    all
+                } else {
+                    all.filter {
+                        it.qualified.lowercase().contains(needle) ||
+                            it.provider.lowercase().contains(needle)
+                    }
+                }
+            }
+            val shown = matches.take(if (query.isBlank()) 25 else 120)
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Search ${all.size} models") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+
+            if (shown.isEmpty()) {
+                Text(
+                    text = "No model matches \"$query\".",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
+                    items(shown, key = { it.qualified }) { choice ->
+                        ListItem(
+                            headlineContent = { Text(choice.model) },
+                            supportingContent = { Text(choice.provider) },
+                            trailingContent = {
+                                if (current == choice.model || current == choice.qualified) {
+                                    MetaPill(
+                                        text = "Current",
+                                        container = MaterialTheme.colorScheme.primaryContainer,
+                                        content = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
+                            },
+                            modifier = Modifier.clickable { onPick(choice.qualified) },
+                        )
+                    }
+                }
+                if (matches.size > shown.size) {
+                    Text(
+                        text = "Showing ${shown.size} of ${matches.size} — keep typing to narrow.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                     )
                 }
             }
@@ -700,10 +776,14 @@ private fun ModelPickerSheet(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             )
             Row(
-                modifier = Modifier.padding(horizontal = 12.dp),
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf("minimal", "low", "medium", "high").forEach { effort ->
+                // "max" is a real level on this server and was missing here, so a
+                // session running at max showed no selection at all.
+                listOf("minimal", "low", "medium", "high", "max").forEach { effort ->
                     val selected = currentReasoning == effort
                     Surface(
                         onClick = { onReasoning(effort) },
