@@ -18,6 +18,12 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
+        // This app ships from GitHub Releases and nowhere else. The flag exists
+        // so a build that must not self-update (a store build, a CI artefact)
+        // can turn the whole updater off in one place — every updater entry
+        // point checks it before doing anything.
+        buildConfigField("boolean", "EXTERNAL_UPDATES_ENABLED", "true")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

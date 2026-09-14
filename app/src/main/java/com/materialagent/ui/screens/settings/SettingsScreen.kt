@@ -29,10 +29,13 @@ import androidx.compose.material.icons.rounded.MotionPhotosOn
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -55,11 +58,14 @@ import com.materialagent.data.HapticLevel
 import com.materialagent.data.MotionLevel
 import com.materialagent.data.PaletteMode
 import com.materialagent.data.ThemeMode
+import com.materialagent.data.update.AppUpdate
+import com.materialagent.data.update.UpdateState
 import com.materialagent.ui.AgentViewModel
 import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.AgentMark
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
+import com.materialagent.ui.components.UpdateProgressBar
 import com.materialagent.ui.rememberCue
 
 /** Appearance, behaviour, server and about — the whole app's knobs. */
@@ -75,6 +81,7 @@ fun SettingsScreen(
     val status by app.status.collectAsStateWithLifecycle()
     val skin by app.skin.collectAsStateWithLifecycle()
     val serverVersion by app.serverVersion.collectAsStateWithLifecycle()
+    val updateState by app.updateState.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
 
     LazyColumn(
@@ -373,6 +380,32 @@ fun SettingsScreen(
                 )
             }
         }
+
+        // The updater sits with About: "which version am I on" and "is there a
+        // newer one" are the same question. It stays one card, so the groups
+        // around it keep the shape they already had.
+        item {
+            UpdateCard(
+                state = updateState,
+                currentVersion = BuildConfig.VERSION_NAME,
+                autoCheck = settings.autoCheckUpdates,
+                onAutoCheckChange = { value ->
+                    cue(HapticCue.SENT)
+                    app.update { it.copy(autoCheckUpdates = value) }
+                },
+                onCheck = {
+                    cue(HapticCue.SENT)
+                    app.checkForUpdates(force = true)
+                },
+                onDownload = { update -> app.downloadUpdate(update) },
+                onInstall = { app.installUpdate() },
+                onCancelDownload = { app.cancelUpdateDownload() },
+                onSkipVersion = {
+                    cue(HapticCue.TURN_COMPLETE)
+                    app.skipUpdateVersion()
+                },
+            )
+        }
     }
 }
 
@@ -556,3 +589,112 @@ private fun ChoiceRow(
 
 private fun Modifier.clickableRowCompat(onClick: () -> Unit): Modifier =
     this.then(Modifier.clickable(onClick = onClick))
+
+/**
+ * The updater's home in Settings.
+ *
+ * It reuses the surrounding row vocabulary rather than inventing its own, so the
+ * version you are on and the version you could be on read as one answer.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun UpdateCard(
+    state: UpdateState,
+    currentVersion: String,
+    autoCheck: Boolean,
+    onAutoCheckChange: (Boolean) -> Unit,
+    onCheck: () -> Unit,
+    onDownload: (AppUpdate) -> Unit,
+    onInstall: () -> Unit,
+    onCancelDownload: () -> Unit,
+    onSkipVersion: () -> Unit,
+) {
+    val busy = state is UpdateState.Checking || state is UpdateState.Downloading
+    SettingsGroup {
+        SettingsRow(
+            icon = Icons.Rounded.SystemUpdate,
+            title = "Updates",
+            subtitle = "Version $currentVersion · ${updateStatus(state)}",
+            trailing = {
+                Switch(
+                    checked = autoCheck,
+                    onCheckedChange = onAutoCheckChange,
+                    enabled = BuildConfig.EXTERNAL_UPDATES_ENABLED,
+                )
+            },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (state) {
+                    is UpdateState.Downloading -> UpdateProgressBar(
+                        progress = state.progress,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    )
+
+                    is UpdateState.Checking -> LoadingIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+
+                    is UpdateState.Failed -> Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+
+                    else -> Unit
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextButton(
+                        onClick = onCheck,
+                        enabled = BuildConfig.EXTERNAL_UPDATES_ENABLED && !busy,
+                    ) { Text("Check for updates") }
+
+                    Spacer(Modifier.weight(1f))
+
+                    when (state) {
+                        is UpdateState.Available -> Button(
+                            onClick = { onDownload(state.update) },
+                            shape = RoundedCornerShape(50),
+                        ) { Text("Update") }
+
+                        is UpdateState.Downloading -> TextButton(onClick = onCancelDownload) {
+                            Text("Cancel")
+                        }
+
+                        is UpdateState.ReadyToInstall -> Button(
+                            onClick = onInstall,
+                            shape = RoundedCornerShape(50),
+                        ) { Text("Install") }
+
+                        else -> Unit
+                    }
+                }
+
+                if (state is UpdateState.Available) {
+                    TextButton(onClick = onSkipVersion) { Text("Skip this version") }
+                }
+            }
+        }
+    }
+}
+
+/** The card subtitle: what the updater is doing right now, in one line. */
+private fun updateStatus(state: UpdateState): String = when (state) {
+    UpdateState.Idle -> "Tap to check for a newer build"
+    UpdateState.Checking -> "Checking GitHub…"
+    UpdateState.UpToDate -> "Up to date"
+    is UpdateState.Available -> "Version ${state.update.versionName} is available"
+    is UpdateState.Downloading -> if (state.progress >= 0f) {
+        "Downloading ${(state.progress * 100).toInt()}%"
+    } else {
+        "Downloading…"
+    }
+    is UpdateState.ReadyToInstall -> "Version ${state.update.versionName} ready to install"
+    is UpdateState.Failed -> "Last check did not complete"
+}

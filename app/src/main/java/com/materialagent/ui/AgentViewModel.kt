@@ -15,6 +15,8 @@ import com.materialagent.data.ChatController
 import com.materialagent.data.ConnectionStatus
 import com.materialagent.data.HapticCue
 import com.materialagent.data.ServerProfile
+import com.materialagent.data.update.AppUpdate
+import com.materialagent.data.update.UpdateState
 import com.materialagent.ui.theme.LocalHapticLevel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -137,6 +139,30 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
     fun dismissProblem() {
         _lastProblem.value = null
     }
+
+    // ── Updates ─────────────────────────────────────────────────────────────
+
+    val updateState: StateFlow<UpdateState> = container.updates.state
+
+    /** Starts a check; [force] skips the once-a-day gate for a manual tap. */
+    fun checkForUpdates(force: Boolean = false) {
+        viewModelScope.launch { container.updates.checkForUpdates(force) }
+    }
+
+    fun downloadUpdate(update: AppUpdate) = container.updates.download(update)
+
+    fun installUpdate() = container.updates.install()
+
+    fun cancelUpdateDownload() = container.updates.cancelDownload()
+
+    fun skipUpdateVersion() {
+        viewModelScope.launch { container.updates.skipVersion() }
+    }
+
+    fun dismissUpdate() = container.updates.dismiss()
+
+    /** Called on resume, so an install parked for a permission trip can finish. */
+    fun onUpdatePermissionReturn() = container.updates.onReturnFromSettings()
 
     /** Secret already stored for a profile, so the edit form can show a filled state. */
     fun storedSecret(profileId: String): String? = container.secrets.get(profileId)

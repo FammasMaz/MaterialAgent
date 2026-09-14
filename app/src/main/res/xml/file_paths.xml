@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The only directory this app ever hands to another process: downloaded update
+  APKs, which the platform installer reads back through a content:// URI. The
+  path matches the `<cache-path name="updates" path="updates/">` the updater
+  writes to — cacheDir/updates.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path
+        name="updates"
+        path="updates/" />
+</paths>

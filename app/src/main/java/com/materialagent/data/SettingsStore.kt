@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.materialagent.core.AuthMode
@@ -66,11 +67,26 @@ class SettingsStore(context: Context) {
             showToolCalls = prefs[SHOW_TOOLS] ?: d.showToolCalls,
             streamingHaptics = prefs[STREAMING_HAPTICS] ?: d.streamingHaptics,
             sendOnEnter = prefs[SEND_ON_ENTER] ?: d.sendOnEnter,
+            autoCheckUpdates = prefs[AUTO_CHECK_UPDATES] ?: d.autoCheckUpdates,
+            skippedVersion = prefs[SKIPPED_VERSION]?.takeIf { it.isNotBlank() } ?: d.skippedVersion,
             activeProfileId = prefs[ACTIVE_PROFILE] ?: d.activeProfileId,
         )
     }
 
     suspend fun snapshot(): AppSettings = settings.first()
+
+    /**
+     * When the updater last asked GitHub.
+     *
+     * Dedicated accessors rather than fields on [AppSettings]: this is the
+     * updater's own bookkeeping, never rendered and never edited by hand, so it
+     * does not belong in the model the UI binds to.
+     */
+    suspend fun lastUpdateCheck(): Long = store.data.first()[LAST_UPDATE_CHECK] ?: 0L
+
+    suspend fun markUpdateCheck(at: Long) {
+        store.edit { prefs -> prefs[LAST_UPDATE_CHECK] = at }
+    }
 
     suspend fun upsertProfile(profile: ServerProfile) {
         store.edit { prefs ->
@@ -116,6 +132,8 @@ class SettingsStore(context: Context) {
             prefs[SHOW_TOOLS] = next.showToolCalls
             prefs[STREAMING_HAPTICS] = next.streamingHaptics
             prefs[SEND_ON_ENTER] = next.sendOnEnter
+            prefs[AUTO_CHECK_UPDATES] = next.autoCheckUpdates
+            prefs[SKIPPED_VERSION] = next.skippedVersion.orEmpty()
             prefs[ACTIVE_PROFILE] = next.activeProfileId.orEmpty()
         }
     }
@@ -159,5 +177,8 @@ class SettingsStore(context: Context) {
         val SHOW_TOOLS = booleanPreferencesKey("show_tool_calls")
         val STREAMING_HAPTICS = booleanPreferencesKey("streaming_haptics")
         val SEND_ON_ENTER = booleanPreferencesKey("send_on_enter")
+        val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val SKIPPED_VERSION = stringPreferencesKey("skipped_version")
+        val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
     }
 }

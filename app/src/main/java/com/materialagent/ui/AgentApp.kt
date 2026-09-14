@@ -19,6 +19,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -28,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.materialagent.ui.components.AgentDestination
 import com.materialagent.ui.components.AgentNavBar
+import com.materialagent.ui.components.UpdateBanner
 import com.materialagent.ui.screens.capabilities.CapabilitiesScreen
 import com.materialagent.ui.screens.chat.ChatScreen
 import com.materialagent.ui.screens.connect.ConnectScreen
@@ -67,6 +70,7 @@ fun AgentApp() {
     val skin by app.skin.collectAsStateWithLifecycle()
     val loaded by app.profilesLoaded.collectAsStateWithLifecycle()
     val profiles by app.profiles.collectAsStateWithLifecycle()
+    val updateState by app.updateState.collectAsStateWithLifecycle()
     val cue = rememberCue()
 
     MaterialAgentTheme(
@@ -87,6 +91,12 @@ fun AgentApp() {
         val backStackEntry by nav.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
         val showNavBar = currentRoute in topLevelRoutes
+
+        // The manager rate-limits this to once a day, so on most launches the
+        // effect never touches the network. Resume is the hook the install
+        // permission round-trip comes back through.
+        LaunchedEffect(Unit) { app.checkForUpdates() }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { app.onUpdatePermissionReturn() }
 
         LaunchedEffect(loaded, profiles.size, settings.activeProfileId) {
             // No server, no inbox: send a first-time user straight to setup.
@@ -148,6 +158,18 @@ fun AgentApp() {
                     )
                 }
             }
+
+            // Outside the NavHost on purpose: a new release should be visible
+            // from whichever screen the user happens to be on.
+            UpdateBanner(
+                state = updateState,
+                onUpdate = { app.downloadUpdate(it) },
+                onInstall = { app.installUpdate() },
+                onCancelDownload = { app.cancelUpdateDownload() },
+                onSkipVersion = { app.skipUpdateVersion() },
+                onDismiss = { app.dismissUpdate() },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
 
             if (showNavBar) {
                 AgentNavBar(

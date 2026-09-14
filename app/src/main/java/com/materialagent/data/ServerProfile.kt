@@ -41,5 +41,9 @@ data class AppSettings(
     val showToolCalls: Boolean = true,
     val streamingHaptics: Boolean = true,
     val sendOnEnter: Boolean = false,
+    val autoCheckUpdates: Boolean = true,
+    // The version the user asked not to be told about again. Null, not "": the
+    // blank sentinel exists only on disk, where DataStore has no null.
+    val skippedVersion: String? = null,
     val activeProfileId: String? = null,
 )

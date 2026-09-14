@@ -1,6 +1,9 @@
 package com.materialagent.data
 
 import android.content.Context
+import com.materialagent.core.HermesJson
+import com.materialagent.data.update.GitHubReleaseApiClient
+import com.materialagent.data.update.UpdateManager
 import com.materialagent.ui.haptics.Haptics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +31,13 @@ class AppContainer(context: Context) {
     val sessions = SessionRepository(connection, scope)
     val capabilities = CapabilityRepository(connection)
     val chat = ChatController(connection, sessions, scope)
+    val updates = UpdateManager(
+        context = context,
+        settings = settings,
+        api = GitHubReleaseApiClient(Http.client, HermesJson),
+        client = Http.client,
+        scope = scope,
+    )
 
     /** Reconnects to the last-used server on launch, if there is one. */
     fun autoconnect() {
