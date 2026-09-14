@@ -335,8 +335,10 @@ states, with deltas decaying (0.25 → 0.04) as the spring settles, and 0.00 out
 - **Haptics are verified at the platform, not at the hand.** The emulator exposes a vibrating
   device supporting `COMPOSE_EFFECTS` and the `TICK`/`LOW_TICK` primitives, so the recorded
   effects are checkable; how they actually feel needs a motor.
-- **Screenshots are from one emulator and one gateway**, at one point in a fast-moving beta. They
-  show the debug build against the reference server, not every state the app can reach.
+- **Screenshots are from one emulator and one gateway**, at one point in a fast-moving beta, and
+  were taken before package provenance was recorded. They do not cover every state the app can
+  reach; in particular the cron-run grouping has no screenshot, because the list shown was
+  captured while it held only test conversations and probes.
 - **No instrumented UI test suite.** There is no `app/src/androidTest` source set; UI behaviour
   is verified by hand on the emulator, and the Compose-level logic that can be tested headlessly
   (search, the pull ratchet, scroll gating, grouping, palette) is covered by JVM tests instead.
