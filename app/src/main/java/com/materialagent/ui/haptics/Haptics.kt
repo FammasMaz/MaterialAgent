@@ -78,6 +78,18 @@ class Haptics(context: Context) {
             // gesture, under the level reserved for attention.
             HapticCue.REFRESH -> effect(s * 0.55f, listOf(0L))
 
+            // The pull past the transcript's top edge giving way. A soft pulse
+            // that firms into the second, so it reads as something yielding
+            // rather than as a confirmation of work — the reveal is still on
+            // screen afterwards, which is its own acknowledgement.
+            HapticCue.REVEAL -> effect(s * 0.5f, listOf(0L, 35L), amplitudes = listOf(0.7f, 1f))
+
+            // One tenth of that pull. A detent, not texture: firmer than the
+            // scroll tick so it reads as a step the gesture took, well under the
+            // level of a tap that opened something. Ten of these lead up to
+            // REVEAL, and they are what make the resistance feel like effort.
+            HapticCue.REVEAL_TICK -> effect(s * 0.34f, listOf(0L))
+
             // Irreversible and gone. The heaviest pulse in the vocabulary on
             // purpose — this is the one moment where a distinct thud earns its
             // place, and it is why delete no longer fires TURN_FAILED.

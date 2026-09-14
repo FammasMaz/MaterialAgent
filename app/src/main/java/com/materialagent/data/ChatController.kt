@@ -57,6 +57,12 @@ enum class HapticCue {
 
     /** A pull-to-refresh gesture passed its threshold. */
     REFRESH,
+
+    /** One ratchet step of the transcript's pull past its top edge, on the way to giving. */
+    REVEAL_TICK,
+
+    /** The transcript's pull gave way and revealed the conversation info. */
+    REVEAL,
 }
 
 /**

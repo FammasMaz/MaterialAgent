@@ -87,6 +87,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -122,6 +123,9 @@ import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
 import com.materialagent.ui.theme.alphaSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
+import com.materialagent.ui.components.pullToReveal
+import com.materialagent.ui.components.PullRatchet
+import com.materialagent.ui.components.rememberPullRevealState
 import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.theme.placementSpec
 import com.materialagent.ui.theme.playfulSpec
@@ -224,6 +228,28 @@ fun ChatScreen(
     }
 
     val listState = rememberLazyListState()
+    /*
+     * The pull past the top of the transcript. One state for the screen: the
+     * panel's height, the latched-open flag and the settle animation all read
+     * from it, and nothing else animates — a second size animation over the same
+     * subtree is what made the navigation pill's neighbours snap.
+     */
+    val reveal = rememberPullRevealState()
+    val revealSpec = placementSpec<Float>()
+
+    /*
+     * The pull's own feedback, read off the pull itself rather than off the
+     * scroll deltas that move it: one ratchet tick per tenth of the way to
+     * giving, then a single REVEAL when the threshold is reached. Reading it as
+     * state is what keeps a streaming answer's auto-scroll silent — that scroll
+     * is a side effect, arrives as such, and never moves the pull at all.
+     */
+    LaunchedEffect(reveal) {
+        val ratchet = PullRatchet()
+        snapshotFlow { reveal.progress }.collect { progress ->
+            ratchet.onProgress(progress)?.let(cue)
+        }
+    }
     val entries = transcript.visibleEntries
     val lastEntrySignature = entries.lastOrNull()?.let { entry ->
         entry.id.hashCode() + entry.text.length + entry.reasoning.length + (entry.tool?.result?.length ?: 0)
@@ -256,7 +282,19 @@ fun ChatScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding(),
+                .imePadding()
+                // The reveal owns the top of the transcript. The pull is attached
+                // here, above both the panel and the list, so it sees the drag the
+                // list could not use and the release that settles it; a nested
+                // scroll connection is only ever consulted by a scrollable below it.
+                .pullToReveal(
+                    state = reveal,
+                    atTop = {
+                        listState.firstVisibleItemIndex == 0 &&
+                            listState.firstVisibleItemScrollOffset == 0
+                    },
+                    settleSpec = revealSpec,
+                ),
         ) {
             ChatTopBar(
                 title = transcript.title.ifBlank {
@@ -323,6 +361,18 @@ fun ChatScreen(
                 }
             }
 
+            PullRevealPanel(
+                state = reveal,
+                transcript = transcript,
+                summary = summary,
+                onCue = cue,
+                onCollapse = {
+                    cue(HapticCue.UI_ACTION)
+                    reveal.collapse(revealSpec)
+                },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+
             Box(modifier = Modifier.weight(1f)) {
                 when {
                     transcript.loadingHistory && entries.isEmpty() ->
@@ -335,13 +385,27 @@ fun ChatScreen(
                         onAction = onBack,
                     )
 
-                    entries.isEmpty() -> EmptyState(
-                        title = app.skin.value?.branding?.welcome?.ifBlank { null }
-                            ?: "What should we get done?",
-                        body = "Ask for something concrete. Your agent works in its own " +
-                            "workspace with its own tools — you will see each step as it runs.",
-                        orbSize = 88.dp,
-                    )
+                    // The empty state keeps a scroll node of its own so the pull
+                    // still has somewhere to be reported from — and shares the
+                    // transcript's list state, because it *is* the transcript, just
+                    // one with nothing in it yet. Hermes only persists a session
+                    // after its first turn, so this is where a session's ids and
+                    // model are still worth looking at.
+                    entries.isEmpty() -> LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 12.dp, bottom = 20.dp),
+                    ) {
+                        item {
+                            EmptyState(
+                                title = app.skin.value?.branding?.welcome?.ifBlank { null }
+                                    ?: "What should we get done?",
+                                body = "Ask for something concrete. Your agent works in its own " +
+                                    "workspace with its own tools — you will see each step as it runs.",
+                                orbSize = 88.dp,
+                            )
+                        }
+                    }
 
                     else -> CompositionLocalProvider(
                         LocalMediaEnvironment provides mediaEnv,
