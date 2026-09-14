@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,8 +69,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -89,6 +95,7 @@ import com.materialagent.ui.components.MarkdownText
 import com.materialagent.ui.components.StreamingText
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.PlainCodeBlock
+import com.materialagent.ui.components.pressScale
 import com.materialagent.ui.theme.ExpressiveMotion
 import kotlinx.serialization.json.Json
 import java.util.Date
@@ -184,26 +191,31 @@ fun AssistantBlock(
             .rowPadding(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (entry.isStreaming) {
-                AgentOrb(size = 22.dp, active = true)
-                Spacer(Modifier.width(10.dp))
-            }
-            if (entry.statusLine.isNotBlank()) {
-                Text(
-                    text = entry.statusLine,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            } else if (entry.interim) {
-                Text(
-                    text = "Thinking out loud",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Every branch below can render nothing, but an empty Row is still a
+        // child and would spend the 8dp Arrangement.spacedBy, so a finished
+        // answer would sit 8dp lower than one that has a status line.
+        if (entry.isStreaming || entry.statusLine.isNotBlank() || entry.interim) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (entry.isStreaming) {
+                    AgentOrb(size = 22.dp, active = true)
+                    Spacer(Modifier.width(10.dp))
+                }
+                if (entry.statusLine.isNotBlank()) {
+                    Text(
+                        text = entry.statusLine,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else if (entry.interim) {
+                    Text(
+                        text = "Thinking out loud",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -227,7 +239,7 @@ fun AssistantBlock(
         }
 
         if (entry.isStreaming && entry.text.isNotBlank()) {
-            StreamingCaret()
+            StreamingCaret(style = MaterialTheme.typography.bodyLarge)
         }
 
         if (entry.error != null) {
@@ -261,9 +273,14 @@ fun AssistantBlock(
     }
 }
 
-/** The blinking block that says "more words are coming". */
+/**
+ * The blinking block that says "more words are coming".
+ *
+ * Sized from the line it trails rather than in fixed dp, so that at large font
+ * scale it grows with the text instead of reading as a stray dot.
+ */
 @Composable
-private fun StreamingCaret() {
+private fun StreamingCaret(style: TextStyle = MaterialTheme.typography.bodyLarge) {
     val transition = rememberInfiniteTransition(label = "caret")
     val alpha by transition.animateFloat(
         initialValue = 1f,
@@ -271,10 +288,11 @@ private fun StreamingCaret() {
         animationSpec = infiniteRepeatable(tween(700), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse),
         label = "caretAlpha",
     )
+    val height = with(LocalDensity.current) { style.lineHeight.toDp() }
     Box(
         modifier = Modifier
-            .width(9.dp)
-            .height(17.dp)
+            .width(height * 0.55f)
+            .height(height)
             .background(
                 MaterialTheme.colorScheme.primary.copy(alpha = alpha),
                 RoundedCornerShape(2.dp),
@@ -299,10 +317,22 @@ fun ReasoningBlock(
         modifier = modifier
             .fillMaxWidth()
             .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize)
-            .clickable(interactionSource = interaction, indication = null, onClick = onToggle),
+            .pressScale(interaction)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = onToggle,
+            )
+            .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // The header is the whole tap target, so it has to carry the 48dp
+            // minimum itself: Modifier.clickable does not expand a touch target.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
                 Icon(
                     Icons.Rounded.Psychology,
                     contentDescription = null,
@@ -312,7 +342,6 @@ fun ReasoningBlock(
                 Text(
                     text = if (streaming) "Reasoning…" else "Reasoning",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
@@ -497,9 +526,11 @@ fun TodosCard(
     modifier: Modifier = Modifier,
 ) {
     val done = todos.count { it.status.equals("completed", ignoreCase = true) }
+    // Progress only ever moves forward, so it must not overshoot: the button-press
+    // spring would spring past the target and walk the bar backwards.
     val progress by animateFloatAsState(
         targetValue = if (todos.isEmpty()) 0f else done.toFloat() / todos.size,
-        animationSpec = ExpressiveMotion.Specs.scale,
+        animationSpec = ExpressiveMotion.Specs.alpha,
         label = "todoProgress",
     )
 
