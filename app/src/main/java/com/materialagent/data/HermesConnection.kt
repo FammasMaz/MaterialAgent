@@ -13,8 +13,10 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownServiceException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -322,8 +324,34 @@ class HermesConnection(
                 "Nothing is listening at ${profile.baseUrl}. Start `hermes serve` there, " +
                     "or check the port and any tunnel."
 
+            // The socket opened, so the address and port are right, but the
+            // handshake never completed. Without its own branch this reported
+            // only "Connection failed", because a timeout carries no message.
+            is TimeoutCancellationException ->
+                "${profile.baseUrl} accepted the connection but never finished the " +
+                    "handshake. Something between here and the gateway — a proxy, a " +
+                    "tunnel, a firewall — is not passing the WebSocket through."
+
+            is CancellationException ->
+                "Connecting to ${profile.baseUrl} was cancelled before it finished."
+
+            is HermesTransportException ->
+                error.message ?: "Connection to ${profile.baseUrl} failed."
+
             is IOException -> "Could not reach ${profile.baseUrl}. Is `hermes serve` running?"
-            else -> error.message ?: "Connection failed"
+
+            // Anything else used to collapse to a bare "Connection failed" and
+            // throw away the one clue that would explain it. Name the type.
+            else -> buildString {
+                append(error.message ?: "Connection failed")
+                append(" (")
+                append(error::class.java.simpleName)
+                error.cause?.let { cause ->
+                    append(": ")
+                    append(cause.message ?: cause::class.java.simpleName)
+                }
+                append(")")
+            }
         }
         val needsCredentials = message.contains("token", ignoreCase = true) ||
             message.contains("password", ignoreCase = true) ||
