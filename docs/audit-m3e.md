@@ -326,7 +326,7 @@ change; nothing requires rework of the theme.
 
 **Fix first — visible on every screen, or on the most-used controls**
 
-1. **Non-morphing buttons** (1.1). Two `IconButton`s and seventeen `TextButton`s still use
+1. **Non-morphing buttons** (1.1). Two `IconButton`s and sixteen `TextButton`s still use
    the single-shape overload, so they do not morph on press while the buttons beside them
    do. Mechanical: add `shapes = …Defaults.shapes()`.
 2. **The tray rounder than its card** (1.2). `ExpressiveToggleGroup`'s 28dp tray sits 16dp

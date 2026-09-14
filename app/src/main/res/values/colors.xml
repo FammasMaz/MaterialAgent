@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="splash_background">#141218</color>
-    <color name="ic_launcher_background">#EADDFF</color>
+    <!--
+      The plate the splash icon sits on. The illustration's line work is #140833,
+      which is all but invisible against the splash's own #141218, so the icon needs
+      a backing. This is the midpoint of the launcher gradient, which keeps the
+      splash and the launcher icon looking like the same brand.
+    -->
+    <color name="splash_icon_background">#4A2484</color>
     <color name="brand_gold">#F5C24B</color>
     <color name="brand_indigo">#4F5488</color>
 </resources>
