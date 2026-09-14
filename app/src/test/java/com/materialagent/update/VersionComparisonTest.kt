@@ -106,4 +106,62 @@ class VersionComparisonTest {
         assertTrue(VersionComparison.isNewer("", "1.0.0"))
         assertTrue(VersionComparison.isNewer("dev", "1.0.0"))
     }
+
+    // ── pre-release ordering (the beta channel) ─────────────────────────────
+
+    @Test
+    fun aLaterBetaOutranksAnEarlierOne() {
+        // The whole point of publishing betas: a tester on beta.1 must be offered
+        // beta.2. A version code that only packs major/minor/patch cannot tell
+        // these apart, so this is the case the numeric code alone loses.
+        assertTrue(VersionComparison.isNewer("1.0.0-beta.1", "1.0.0-beta.2"))
+        assertFalse(VersionComparison.isNewer("1.0.0-beta.2", "1.0.0-beta.1"))
+    }
+
+    @Test
+    fun numericPreReleaseIdentifiersCompareAsNumbers() {
+        // beta.10 is later than beta.2; comparing those as strings would say otherwise.
+        assertTrue(VersionComparison.isNewer("1.0.0-beta.2", "1.0.0-beta.10"))
+        assertFalse(VersionComparison.isNewer("1.0.0-beta.10", "1.0.0-beta.2"))
+    }
+
+    @Test
+    fun aReleaseOutranksItsOwnPreReleases() {
+        assertTrue(VersionComparison.isNewer("1.0.0-beta.2", "1.0.0"))
+        // And a stable install is never offered an older beta.
+        assertFalse(VersionComparison.isNewer("1.0.0", "1.0.0-beta.2"))
+    }
+
+    @Test
+    fun releaseCandidatesSortAfterBetas() {
+        assertTrue(VersionComparison.isNewer("1.0.0-beta.5", "1.0.0-rc.1"))
+        assertFalse(VersionComparison.isNewer("1.0.0-rc.1", "1.0.0-beta.5"))
+    }
+
+    @Test
+    fun theDebugVariantSuffixIsNotAPreRelease() {
+        // The fallback release path publishes a debug-signed APK whose VERSION_NAME
+        // is `1.0.0-debug`. Reading that as a pre-release would rank it below
+        // `1.0.0-beta.1` and stop the updater from ever prompting on it.
+        assertEquals(VersionComparison.compare("1.0.0-debug", "1.0.0"), 0)
+        assertTrue(VersionComparison.isNewer("1.0.0-debug", "1.0.1-beta.1"))
+        // The same release the debug-signed install already is: nothing to offer.
+        assertFalse(VersionComparison.isNewer("1.0.0-debug", "1.0.0"))
+        // The case that actually matters with the fallback signing path: a
+        // debug-signed *beta* install (VERSION_NAME `1.0.0-beta.1-debug`) must be
+        // offered the next beta, not be ranked below its own pre-release line.
+        assertTrue(VersionComparison.isNewer("1.0.0-beta.1-debug", "1.0.0-beta.2"))
+    }
+
+    @Test
+    fun buildMetadataIsIgnoredInComparisons() {
+        assertEquals(VersionComparison.compare("1.2.3+build.7", "1.2.3"), 0)
+        assertEquals(VersionComparison.compare("v1.2.3", "1.2.3"), 0)
+    }
+
+    @Test
+    fun aBetaCanBeSkippedLikeAnyOtherVersion() {
+        assertFalse(VersionComparison.isNewer("1.0.0-beta.1", "1.0.0-beta.2", skipped = "1.0.0-beta.2"))
+        assertTrue(VersionComparison.isNewer("1.0.0-beta.1", "1.0.0-beta.3", skipped = "1.0.0-beta.2"))
+    }
 }

@@ -10,11 +10,22 @@ on:
   workflow_dispatch:
     inputs:
       version_bump:
-        description: 'Version bump type'
+        description: 'Version bump type (ignored when a pre-release suffix is given)'
         required: true
         default: 'patch'
         type: choice
         options: [patch, minor, major]
+      version_suffix:
+        description: 'Pre-release suffix, e.g. beta.1 — leave empty for a stable release'
+        required: false
+        default: 'beta.1'
+        type: string
+      prerelease:
+        description: 'Publish as a pre-release (beta)?'
+        required: true
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
       release_notes:
         description: 'Release notes (what changed in this version)'
         required: true
@@ -67,15 +78,24 @@ jobs:
         id: version
         run: |
           CURRENT_VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          # A previous run may have left a pre-release suffix in place, so the
+          # numeric bump is computed from the base version and never from
+          # something like `1.0.0-beta.1`, which is not three integers.
+          CURRENT_BASE="${CURRENT_VERSION%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_BASE"
 
-          case "${{ inputs.version_bump }}" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
+          SUFFIX="${{ inputs.version_suffix }}"
+          if [ -n "$SUFFIX" ]; then
+            NEW_VERSION="${CURRENT_BASE}-${SUFFIX}"
+          else
+            case "${{ inputs.version_bump }}" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
+            NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          fi
 
-          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           CURRENT_CODE=$(grep -oP 'versionCode = \K\d+' app/build.gradle.kts)
 
           echo "current_version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
@@ -142,11 +162,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.new_version }}
-          name: MaterialAgent v${{ steps.version.outputs.new_version }}
+          name: MaterialAgent v${{ steps.version.outputs.new_version }}${{ inputs.prerelease == 'true' && ' (beta)' || '' }}
+          prerelease: ${{ inputs.prerelease == 'true' }}
           body: |
             ## What's new in v${{ steps.version.outputs.new_version }}
 
             ${{ inputs.release_notes }}
+
+            ${{ inputs.prerelease == 'true'
+                && '### Beta build\n\nThis is a pre-release for testing. Expect rough edges: the app is being actively reworked and not everything is finished yet. The in-app updater on a beta build will offer the next beta, and a stable release once one exists.'
+                || '' }}
 
             ---
 
@@ -165,7 +190,6 @@ jobs:
             ```
           files: ${{ steps.apk.outputs.path }}
           draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

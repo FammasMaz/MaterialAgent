@@ -132,7 +132,11 @@ private fun AvailableContent(
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Version ${update.versionName} is available",
+                text = if (update.isPreRelease) {
+                    "Beta ${update.versionName} is available"
+                } else {
+                    "Version ${update.versionName} is available"
+                },
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
@@ -172,7 +176,7 @@ private fun DownloadingContent(
         Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = "Downloading update", style = MaterialTheme.typography.titleSmall)
+            Text(text = if (update.isPreRelease) "Downloading beta" else "Downloading update", style = MaterialTheme.typography.titleSmall)
             Text(
                 text = if (progress >= 0f) {
                     "Version ${update.versionName} · ${(progress * 100).toInt()}%"
@@ -202,7 +206,11 @@ private fun ReadyContent(
         Column(modifier = Modifier.weight(1f)) {
             Text(text = "Ready to install", style = MaterialTheme.typography.titleSmall)
             Text(
-                text = "Version ${update.versionName} downloaded",
+                text = if (update.isPreRelease) {
+                    "Beta ${update.versionName} downloaded"
+                } else {
+                    "Version ${update.versionName} downloaded"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 maxLines = 1,

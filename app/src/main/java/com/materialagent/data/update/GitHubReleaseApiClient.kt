@@ -44,7 +44,7 @@ class GitHubReleaseApiClient(
 
     private fun fetch(): AppUpdate {
         val request = Request.Builder()
-            .url(LATEST_RELEASE_URL)
+            .url(RELEASES_URL)
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .get()
@@ -60,39 +60,49 @@ class GitHubReleaseApiClient(
         }
     }
 
-    /** Turns one release document into an [AppUpdate]; the APK asset identifies it. */
+    /**
+     * Picks the newest installable release, betas included.
+     *
+     * This used to read `/releases/latest`, which *excludes pre-releases* — so the
+     * moment builds are published as betas, that endpoint reports nothing and the
+     * updater silently goes quiet. Listing releases and choosing by version also
+     * stops a freshly published beta of an older line outranking a newer stable.
+     */
     private fun parse(body: String): AppUpdate {
-        val release = json.parseToJsonElement(body).jsonObject
-
-        val tag = release["tag_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
-            ?: throw GitHubReleaseException("The latest release has no tag")
-        val versionName = tag.removePrefix("v").removePrefix("V")
-
-        val apk = release["assets"]?.jsonArray
-            ?.map { it.jsonObject }
-            ?.firstOrNull { it["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true }
-            ?: throw GitHubReleaseException("The latest release has no APK attached")
-
-        val downloadUrl = apk["browser_download_url"]?.jsonPrimitive?.content
-            ?.takeIf { it.isNotBlank() }
-            ?: throw GitHubReleaseException("The release APK has no download URL")
-
-        return AppUpdate(
-            versionName = versionName,
-            versionCode = VersionComparison.versionCode(versionName),
-            releaseName = release["name"]?.jsonPrimitive?.content.orEmpty(),
-            releaseNotes = release["body"]?.jsonPrimitive?.content.orEmpty(),
-            downloadUrl = downloadUrl,
-            assetName = apk["name"]?.jsonPrimitive?.content.orEmpty(),
-            assetSize = apk["size"]?.jsonPrimitive?.long ?: 0L,
-            publishedAt = release["published_at"]?.jsonPrimitive?.content.orEmpty(),
-        )
+        val releases = json.parseToJsonElement(body).jsonArray.map { it.jsonObject }
+        val candidates = releases.mapNotNull { release ->
+            val tag = release["tag_name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            val versionName = tag.removePrefix("v").removePrefix("V")
+            if (VersionComparison.versionCode(versionName) <= 0) return@mapNotNull null
+            val apk = release["assets"]?.jsonArray
+                ?.map { it.jsonObject }
+                ?.firstOrNull { it["name"]?.jsonPrimitive?.content?.endsWith(".apk") == true }
+                ?: return@mapNotNull null
+            val downloadUrl = apk["browser_download_url"]?.jsonPrimitive?.content
+                ?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
+            AppUpdate(
+                versionName = versionName,
+                versionCode = VersionComparison.versionCode(versionName),
+                releaseName = release["name"]?.jsonPrimitive?.content.orEmpty(),
+                releaseNotes = release["body"]?.jsonPrimitive?.content.orEmpty(),
+                downloadUrl = downloadUrl,
+                assetName = apk["name"]?.jsonPrimitive?.content.orEmpty(),
+                assetSize = apk["size"]?.jsonPrimitive?.long ?: 0L,
+                publishedAt = release["published_at"]?.jsonPrimitive?.content.orEmpty(),
+                isPreRelease = release["prerelease"]?.jsonPrimitive?.content?.toBoolean() ?: false,
+            )
+        }
+        return candidates.maxWithOrNull { a, b ->
+            VersionComparison.compare(a.versionName, b.versionName) ?: 0
+        } ?: throw GitHubReleaseException("No release with an APK attached was found")
     }
 
     private companion object {
         const val OWNER = "FammasMaz"
         const val REPO = "MaterialAgent"
-        const val LATEST_RELEASE_URL = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
+        const val RELEASES_URL = "https://api.github.com/repos/$OWNER/$REPO/releases?per_page=30"
     }
 }
 

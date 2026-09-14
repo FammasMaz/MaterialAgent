@@ -15,6 +15,8 @@ data class AppUpdate(
     val assetName: String,
     val assetSize: Long,
     val publishedAt: String,
+    /** True for a beta or release candidate, so the UI can say so instead of "update". */
+    val isPreRelease: Boolean = false,
 )
 
 /**
