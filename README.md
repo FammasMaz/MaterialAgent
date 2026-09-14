@@ -102,6 +102,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## Approvals
 
+![An approval card waiting on a destructive command](image.png)
+
 A destructive shell command is the one place the agent stops and asks, and the card that asks has
 to be exactly right — the tool is blocked until it is answered. It was wrong in three ways at once:
 

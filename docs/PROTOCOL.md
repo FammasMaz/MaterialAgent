@@ -124,12 +124,32 @@ handles both, and exposes a setting that turns `display.tool_progress` on via
 
 ## 5. Method catalogue (subset used by MaterialAgent)
 
+### Which id a method wants
+
+Two ids exist and they are not interchangeable, which is the single most error-prone thing about
+this API. The **stored** id (`20260914_042811_ec6c25`) is what `session.list` shows and what
+survives restarts; the **runtime** id is a short hex handle minted by `session.create` and
+returned again by `session.resume`.
+
+| Wants the runtime id | Wants the stored id |
+|---|---|
+| `session.branch`, `session.history`, `session.undo` | `session.delete`, `session.title` |
+| `prompt.submit`, `session.steer`, `session.interrupt` | |
+
+The runtime id is only valid **while the session is open**: delete it while open and the gateway
+answers `4023 cannot delete an active session` (so it was found), but ask again after
+`session.close` and the same id answers `4007 session not found` — the handle is forgotten on
+close, while the stored id still works. A call with the wrong id is not silently ignored; it
+fails with `4001` (or `4023`), which is why the distinction is written down here rather than
+inferred.
+
 **Sessions** `session.create{source?,title?,cwd?,model?,provider?,reasoning_effort?,profile?,messages?,parent_session_id?}`
 → `{session_id, stored_session_id, message_count, messages, info}` ·
 `session.list` → `{sessions:[{id,title,preview,started_at,message_count,source}]}` ·
 `session.most_recent` → `{session_id,title,started_at,source}` ·
 `session.resume{stored_id}` → `{session_id, session_key, messages, message_count, messages_omitted, running, turn_started_at, started_at, status, resumed, info}` ·
-`session.history{session_id}` → `{count, messages}` ·
+`session.history{session_id}` → `{count, messages}` — **runtime** id, like `branch`; the stored id
+answers `4001 session not found` ·
 `session.activate` · `session.close` → `{closed:true}` ·
 `session.delete` (active session must be closed first) ·
 `session.branch{session_id}` — `session_id` here is the **runtime** id from `session.create`/
@@ -140,7 +160,10 @@ happens at the last user message — that reply is *not* carried over, the title
 Returns the new session incl. copied `messages` ·
 `session.title{session_id,title}` → `{pending,title}` ·
 `session.interrupt` → `{status:"interrupted"}` ·
-`session.steer{session_id,text}` · `session.undo` · `session.set_hidden` ·
+`session.steer{session_id,text}` · `session.set_hidden` ·
+`session.undo{session_id}` → `{removed:2}` — drops the **last turn** (the user message and the
+reply), leaving everything before it untouched; measured on a two-turn session, which went from
+four messages back to the first exchange. Runtime id. ·
 `session.cwd.set` · `session.compress` · `session.context_breakdown` ·
 `session.usage` → usage object · `session.status` → `{output}` (human text) ·
 `session.events.since{session_id,last_seen}` → `{events:[…], epoch}`.
