@@ -30,6 +30,15 @@ class ChatViewModel(
     /** Models the server offers, for the in-chat model picker. */
     val providers = container.capabilities.providers
 
+    /**
+     * Why the last model fetch failed, if it did.
+     *
+     * The picker's empty state would otherwise have to choose between "the server
+     * offers no models" and "the fetch failed", which in here look identical — and
+     * it is the kind of distinction that decides whether the user waits or retries.
+     */
+    val modelError = container.capabilities.lastError
+
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
 

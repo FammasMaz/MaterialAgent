@@ -5,15 +5,12 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +30,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -45,17 +41,14 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Psychology
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -67,16 +60,11 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -92,7 +80,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
@@ -161,6 +148,7 @@ fun ChatScreen(
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val statusText by viewModel.statusText.collectAsStateWithLifecycle()
     val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val modelError by viewModel.modelError.collectAsStateWithLifecycle()
     val pendingFiles by viewModel.attachments.collectAsStateWithLifecycle()
     val connection by app.status.collectAsStateWithLifecycle()
     val showReasoning = LocalShowReasoning.current
@@ -187,7 +175,6 @@ fun ChatScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
-    var modelSheetOpen by remember { mutableStateOf(false) }
     var infoSheetOpen by remember { mutableStateOf(false) }
 
     // The stored-list row for this conversation, when there is one. It is the only
@@ -306,11 +293,13 @@ fun ChatScreen(
                 menuOpen = menuOpen,
                 onMenuOpenChange = { menuOpen = it },
                 onBack = onBack,
-                onPickModel = {
-                    menuOpen = false
-                    modelSheetOpen = true
-                    viewModel.loadModelOptions()
-                },
+                providers = providers,
+                modelError = modelError,
+                onLoadModels = { viewModel.loadModelOptions() },
+                onPickModel = { viewModel.setModel(it) },
+                onReasoning = { viewModel.setReasoning(it) },
+                onFast = { viewModel.setFast(it) },
+                onCue = cue,
                 onInterrupt = {
                     menuOpen = false
                     cue(HapticCue.INTERRUPTED)
@@ -538,27 +527,6 @@ fun ChatScreen(
         )
     }
 
-    if (modelSheetOpen) {
-        ModelPickerSheet(
-            onDismiss = { modelSheetOpen = false },
-            providers = providers,
-            current = transcript.info?.model,
-            onPick = { qualified ->
-                viewModel.setModel(qualified)
-                modelSheetOpen = false
-            },
-            onReasoning = { effort ->
-                viewModel.setReasoning(effort)
-                modelSheetOpen = false
-            },
-            onFast = { enabled ->
-                viewModel.setFast(enabled)
-                modelSheetOpen = false
-            },
-            currentReasoning = transcript.info?.reasoningEffort,
-            fastEnabled = transcript.info?.fast == true,
-        )
-    }
 }
 
 /** Dispatches one transcript entry to the right row renderer. */
@@ -615,7 +583,13 @@ private fun ChatTopBar(
     menuOpen: Boolean,
     onMenuOpenChange: (Boolean) -> Unit,
     onBack: () -> Unit,
-    onPickModel: () -> Unit,
+    providers: List<ProviderInfo>,
+    modelError: String?,
+    onLoadModels: () -> Unit,
+    onPickModel: (String) -> Unit,
+    onReasoning: (String) -> Unit,
+    onFast: (Boolean) -> Unit,
+    onCue: (HapticCue) -> Unit,
     onInterrupt: () -> Unit,
     onBranch: () -> Unit,
     onStatus: () -> Unit,
@@ -655,16 +629,31 @@ private fun ChatTopBar(
                             icon = Icons.Rounded.AutoAwesome,
                         )
                     }
-                    entry?.model?.let { model ->
+                    /*
+                     * The model pill *is* the picker's trigger: tapping it opens the
+                     * panel anchored under itself. It is drawn even before the server
+                     * has reported a model, so there is no state in which the picker
+                     * cannot be reached — which is why the icon button that used to
+                     * open the sheet is gone rather than sitting beside it.
+                     */
+                    ModelPicker(
+                        current = entry?.model,
+                        providers = providers,
+                        currentReasoning = entry?.reasoningEffort,
+                        fastEnabled = entry?.fast == true,
+                        running = running,
+                        error = modelError,
+                        onLoadModels = onLoadModels,
+                        onPick = onPickModel,
+                        onReasoning = onReasoning,
+                        onFast = onFast,
+                        onCue = onCue,
                         // The model name is the one token here that can be arbitrarily
                         // long, and this row has no room to grow: let it take what is
                         // left and ellipsize rather than push the other pills past the
                         // header's edge.
-                        MetaPill(
-                            text = model.substringAfterLast('/'),
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                    }
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                     // The effort pill is the least informative of the three and
                     // the header only has room for so much; while a turn runs it
                     // steps aside for the live timer.
@@ -674,10 +663,6 @@ private fun ChatTopBar(
                         }
                     }
                 }
-            }
-
-            IconButton(onClick = onPickModel, shapes = IconButtonDefaults.shapes()) {
-                Icon(Icons.Rounded.Tune, contentDescription = "Model and reasoning")
             }
 
             Box {
@@ -996,186 +981,4 @@ private fun ConnectionStatus.baseUrlOrNull(): String? = when (this) {
     is ConnectionStatus.Connecting -> profile.baseUrl
     is ConnectionStatus.Failed -> profile?.baseUrl
     ConnectionStatus.Idle -> null
-}
-
-/** One row of the model picker: `qualified` is what gets sent to the server. */
-private data class ModelChoice(
-    val qualified: String,
-    val model: String,
-    val provider: String,
-)
-
-/** Models, reasoning effort and the fast tier — all per session. */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun ModelPickerSheet(
-    providers: List<ProviderInfo>,
-    current: String?,
-    currentReasoning: String?,
-    fastEnabled: Boolean,
-    onDismiss: () -> Unit,
-    onPick: (String) -> Unit,
-    onReasoning: (String) -> Unit,
-    onFast: (Boolean) -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        // One horizontal inset for the whole sheet. Children used to add their
-        // own (12dp, then 8dp on the search box), so the title, the model rows
-        // and the search field each started at a different left edge.
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = "Model",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-
-            if (providers.isEmpty()) {
-                Text(
-                    text = "No models reported. Pull the server's capabilities from the Agent tab.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            }
-
-            // A busy server advertises well over a thousand models. A flat column
-            // of them would be both slow to compose and would push the Reasoning
-            // section past the bottom of the sheet, so this is a search box over a
-            // height-bounded lazy list, with the unfiltered view capped to a short
-            // first page.
-            var query by remember { mutableStateOf("") }
-            val all = remember(providers) {
-                providers.flatMap { provider ->
-                    val providerName = provider.name.ifBlank { provider.slug }
-                    provider.models.map { model ->
-                        ModelChoice("${provider.slug}/$model", model, providerName)
-                    }
-                }
-            }
-            val matches = remember(query, all) {
-                val needle = query.trim().lowercase()
-                if (needle.isEmpty()) {
-                    all
-                } else {
-                    all.filter {
-                        it.qualified.lowercase().contains(needle) ||
-                            it.provider.lowercase().contains(needle)
-                    }
-                }
-            }
-            val shown = matches.take(if (query.isBlank()) 25 else 120)
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Search ${all.size} models") },
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }, shapes = IconButtonDefaults.shapes()) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Clear search")
-                        }
-                    }
-                },
-                shape = AgentShapes.pill,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-            )
-
-            if (shown.isEmpty()) {
-                Text(
-                    text = "No model matches \"$query\".",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
-                    items(shown, key = { it.qualified }) { choice ->
-                        ListItem(
-                            // The clickable overload, not a hand-rolled
-                            // `Modifier.clickable`: this one brings the M3 row's
-                            // own ripple, minimum height and semantics — and it is
-                            // the only overload that accepts `contentPadding`. Its
-                            // headline is the trailing `content` slot.
-                            onClick = { onPick(choice.qualified) },
-                            supportingContent = { Text(choice.provider) },
-                            trailingContent = {
-                                if (current == choice.model || current == choice.qualified) {
-                                    MetaPill(
-                                        text = "Current",
-                                        container = MaterialTheme.colorScheme.primaryContainer,
-                                        content = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                }
-                            },
-                            // Zero horizontal padding: the default 16dp would put
-                            // the rows 16dp right of every other row in the sheet,
-                            // which already sits in a 16dp column.
-                            contentPadding = PaddingValues(horizontal = 0.dp),
-                        ) {
-                            Text(choice.model)
-                        }
-                    }
-                }
-                if (matches.size > shown.size) {
-                    Text(
-                        text = "Showing ${shown.size} of ${matches.size} — keep typing to narrow.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
-                }
-            }
-
-            Text(
-                text = "Reasoning",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
-            Row(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // "max" is a real level on this server and was missing here, so a
-                // session running at max showed no selection at all.
-                listOf("minimal", "low", "medium", "high", "max").forEach { effort ->
-                    val selected = currentReasoning == effort
-                    Surface(
-                        onClick = { onReasoning(effort) },
-                        shape = AgentShapes.pill,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHighest
-                        },
-                        modifier = Modifier.alpha(if (selected) 1f else 0.85f),
-                    ) {
-                        Text(
-                            text = effort,
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        )
-                    }
-                }
-            }
-
-            TextButton(
-                onClick = { onFast(!fastEnabled) },
-                modifier = Modifier.padding(vertical = 8.dp),
-            ) {
-                Text(if (fastEnabled) "Fast tier: on" else "Fast tier: off")
-            }
-
-            Spacer(Modifier.height(24.dp))
-        }
-    }
 }

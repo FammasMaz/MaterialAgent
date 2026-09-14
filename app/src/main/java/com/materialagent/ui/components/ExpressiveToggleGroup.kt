@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -87,6 +88,19 @@ fun ExpressiveToggleGroup(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     contentPadding: Dp = AgentShapes.toggleTrayInset,
     /**
+     * Padding inside each segment, when the caller's surface is narrower than the
+     * library's default assumes.
+     *
+     * The default is [ButtonDefaults.contentPaddingFor]'s own figure, sized for a
+     * button with room around it. Five English labels in one tray do not have that
+     * room: at the default padding "minimal" through "max" want about 352dp, which
+     * is more than a compact popover can offer, so they would scroll. Passing a
+     * tighter figure here keeps all five on screen while leaving the measurement
+     * honest — [splitWouldClip] is handed the same value the button is drawn with,
+     * which is the invariant the default case was written to keep.
+     */
+    itemPadding: PaddingValues? = null,
+    /**
      * Propose an even split across the tray — right for two or three short labels,
      * where a ragged edge would look accidental. It is a proposal rather than an
      * instruction: the group measures first and falls back to a scrolling row when
@@ -98,7 +112,7 @@ fun ExpressiveToggleGroup(
     if (options.isEmpty()) return
     val scroll = rememberScrollState()
     BoxWithConstraints(modifier) {
-        val splitEvenly = fillWidth && !splitWouldClip(options, maxWidth, contentPadding)
+        val splitEvenly = fillWidth && !splitWouldClip(options, maxWidth, contentPadding, itemPadding)
         Row(
             modifier = Modifier
                 .then(if (splitEvenly) Modifier.fillMaxWidth() else Modifier)
@@ -122,6 +136,7 @@ fun ExpressiveToggleGroup(
                     checked = index == selectedIndex,
                     shapes = if (single) ButtonGroupDefaults.connectedMiddleButtonShapes() else shapes,
                     expand = splitEvenly,
+                    itemPadding = itemPadding,
                     onClick = {
                         if (index != selectedIndex) onSelect(index)
                     },
@@ -136,18 +151,19 @@ fun ExpressiveToggleGroup(
  *
  * Both label styles are measured — the selected item wears the emphasized one, which
  * is heavier and therefore wider — and the item's own inset inside the button is the
- * library's own token for this button height, so neither the threshold nor the padding
- * is a second guess at what [ToggleButton] is about to draw.
+ * library's own token for this button height, or the caller's [itemPadding] when it
+ * passed one, so neither the threshold nor the padding is a second guess at what
+ * [ToggleButton] is about to draw.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun splitWouldClip(options: List<String>, available: Dp, contentPadding: Dp): Boolean {
+private fun splitWouldClip(options: List<String>, available: Dp, contentPadding: Dp, itemPadding: PaddingValues?): Boolean {
     if (!available.isFinite) return true
     val spacing = ButtonGroupDefaults.ConnectedSpaceBetween * (options.size - 1)
     val perItem = (available - contentPadding * 2 - spacing) / options.size
     val density = LocalDensity.current
     val inset = with(density) {
-        val padding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight)
+        val padding = itemPadding ?: ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight)
         with(LocalLayoutDirection.current) {
             padding.calculateLeftPadding(this) + padding.calculateRightPadding(this)
         }.toPx()
@@ -173,23 +189,41 @@ private fun RowScope.ToggleGroupItem(
     checked: Boolean,
     shapes: ToggleButtonShapes,
     expand: Boolean,
+    itemPadding: PaddingValues?,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val size = if (expand) Modifier.weight(1f).fillMaxWidth() else Modifier
-    ToggleButton(
-        checked = checked,
-        onCheckedChange = { onClick() },
-        shapes = shapes,
-        // An explicit height, not just a minimum: without it `ToggleButton` draws
-        // M3E's 40dp container inside a 48dp touch target, and those 8dp of slack
-        // make the tray's ring 8dp top and bottom against 4dp at the sides — so no
-        // single tray radius can sit concentrically with both. Pinning the box to
-        // the height the tray is built around keeps the ring even on all four sides.
-        modifier = size
-            .height(AgentShapes.toggleItemHeight)
-            .semantics { role = Role.RadioButton },
-    ) {
-        content()
+    // An explicit height, not just a minimum: without it `ToggleButton` draws
+    // M3E's 40dp container inside a 48dp touch target, and those 8dp of slack
+    // make the tray's ring 8dp top and bottom against 4dp at the sides — so no
+    // single tray radius can sit concentrically with both. Pinning the box to
+    // the height the tray is built around keeps the ring even on all four sides.
+    val modifier = size
+        .height(AgentShapes.toggleItemHeight)
+        .semantics { role = Role.RadioButton }
+
+    // Two call sites rather than `contentPadding = itemPadding ?: default`: the
+    // default has to stay the library's own value, and naming it here would be a
+    // second guess at it.
+    if (itemPadding == null) {
+        ToggleButton(
+            checked = checked,
+            onCheckedChange = { onClick() },
+            shapes = shapes,
+            modifier = modifier,
+        ) {
+            content()
+        }
+    } else {
+        ToggleButton(
+            checked = checked,
+            onCheckedChange = { onClick() },
+            shapes = shapes,
+            contentPadding = itemPadding,
+            modifier = modifier,
+        ) {
+            content()
+        }
     }
 }
