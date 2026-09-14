@@ -36,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -67,6 +68,7 @@ import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.components.UpdateProgressBar
 import com.materialagent.ui.rememberCue
+import com.materialagent.ui.theme.ExpressiveMotion
 
 /** Appearance, behaviour, server and about — the whole app's knobs. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -423,6 +425,7 @@ private fun ConnectionCard(
             is ConnectionStatus.Failed -> MaterialTheme.colorScheme.errorContainer
             else -> MaterialTheme.colorScheme.surfaceContainerHigh
         },
+        animationSpec = ExpressiveMotion.Specs.color,
         label = "connectionContainer",
     )
 
@@ -499,11 +502,12 @@ private fun SettingsGroup(content: @Composable () -> Unit) {
 
 @Composable
 private fun SettingsDivider() {
-    Spacer(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .padding(horizontal = 16.dp),
+    // A Spacer with only a height paints nothing at all: this used to be a
+    // 1dp `Spacer`, so every one of the ten separators in this screen was
+    // invisible. It needs a divider that actually draws.
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
     )
 }
 

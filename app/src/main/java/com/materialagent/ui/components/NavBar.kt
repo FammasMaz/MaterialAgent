@@ -3,6 +3,7 @@ package com.materialagent.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.materialagent.data.HapticCue
 import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.contentSizeSpec
+import com.materialagent.ui.theme.cornerRadiusSpec
 
 /** A top-level destination in the floating navigation bar. */
 data class AgentDestination(
@@ -134,7 +137,7 @@ private fun NavigationPill(
         onClick = onClick,
         modifier = Modifier
             .pressScale(interaction)
-            .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize),
+            .animateContentSize(animationSpec = contentSizeSpec()),
         shape = RoundedCornerShape(50),
         color = container,
         contentColor = content,
@@ -144,10 +147,20 @@ private fun NavigationPill(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // The press feedback used to swap 22dp for 21dp in a single frame
+            // while the colour and size around it sprang — a 1dp instant change
+            // reads as a glitch. Same distance, but it travels.
+            val iconSize by animateDpAsState(
+                targetValue = if (pressed && !selected) 21.dp else 22.dp,
+                animationSpec = cornerRadiusSpec(),
+                label = "navIconSize",
+            )
             Icon(
                 imageVector = destination.icon,
-                contentDescription = destination.label,
-                modifier = Modifier.size(if (pressed && !selected) 21.dp else 22.dp),
+                // Announced once: when the pill shows the label, the Text below
+                // already carries the name, so the icon must not repeat it.
+                contentDescription = if (selected && showLabel) null else destination.label,
+                modifier = Modifier.size(iconSize),
             )
             AnimatedVisibility(visible = selected && showLabel) {
                 Row {

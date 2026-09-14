@@ -3,7 +3,10 @@ package com.materialagent.ui.theme
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import com.materialagent.data.MotionLevel
 
 /**
@@ -96,3 +99,30 @@ fun <T> motionFor(level: MotionLevel, spatial: Boolean): SpringSpec<T> =
     } else {
         if (spatial) ExpressiveMotion.Spatial.default() else ExpressiveMotion.Effects.alpha()
     }
+
+/*
+ * Preference-aware specs for call sites.
+ *
+ * `motionFor` alone was not enough: call sites hardcoded
+ * `ExpressiveMotion.Specs.*`, so choosing "Reduced" in settings flattened
+ * nothing except the orb, while every other animation kept overshooting. These
+ * read [LocalMotionLevel] straight off the theme instead, so one setting governs
+ * the whole app.
+ *
+ * Only *spatial* travel is routed here. Effect specs (colour, alpha) are already
+ * critically damped by construction, so they cannot overshoot and do not need to
+ * change with the preference.
+ */
+
+/** Spec for anything that moves through space, honouring the motion setting. */
+@Composable
+fun scaleSpec(): SpringSpec<Float> = motionFor(LocalMotionLevel.current, spatial = true)
+
+@Composable
+fun contentSizeSpec(): SpringSpec<IntSize> = motionFor(LocalMotionLevel.current, spatial = true)
+
+@Composable
+fun cornerRadiusSpec(): SpringSpec<Dp> = motionFor(LocalMotionLevel.current, spatial = true)
+
+@Composable
+fun placementSpec(): SpringSpec<Float> = motionFor(LocalMotionLevel.current, spatial = true)

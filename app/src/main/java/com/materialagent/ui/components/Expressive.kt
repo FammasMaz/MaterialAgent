@@ -40,6 +40,7 @@ import androidx.graphics.shapes.Morph
 import com.materialagent.data.MotionLevel
 import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalMotionLevel
+import com.materialagent.ui.theme.scaleSpec
 
 /*
  * The expressive primitives this app is built from.
@@ -60,26 +61,28 @@ fun AgentMark(
     size: Dp = 96.dp,
     tint: Color = MaterialTheme.colorScheme.primary,
     gradient: Boolean = true,
+    /**
+     * How far to blend toward the gold accent: 0 is flat indigo, 1 is the full
+     * sweep. Callers animate this instead of relying on [size], which used to
+     * decide the blend behind their back.
+     */
+    sweepAmount: Float = 1f,
     sheen: Boolean = false,
 ) {
-    // Indigo and gold are complements, so blending them across a whole shape
-    // passes through khaki — which is what a 40dp session avatar cannot afford.
-    // A hero mark gets the full sweep; a small one stays indigo and wears the
-    // gold as a single deliberate accent on the apex, which is legible at any size.
     val accent = MaterialTheme.colorScheme.tertiary
-    val hero = size >= 72.dp
-    // Not `sweep`: that name already belongs to the sheen animation below.
-    val brandSweep = gradient && hero
-    val brush = if (brandSweep) {
-        Brush.linearGradient(listOf(tint, accent))
-    } else {
-        Brush.linearGradient(listOf(tint, tint))
-    }
-    val faded = if (brandSweep) {
-        Brush.linearGradient(listOf(tint.copy(alpha = 0.82f), accent.copy(alpha = 0.82f)))
-    } else {
-        brush
-    }
+    // The sweep is a parameter, not a size threshold. Deriving it from `size`
+    // meant a mark animating across 72dp hard-switched from the indigo→gold
+    // gradient to flat indigo mid-flight, which read as a colour pop; and it made
+    // `gradient = true` a lie at any size below the threshold. Callers animate the
+    // amount, so the blend interpolates and the parameter does what it says.
+    val mix = if (gradient) sweepAmount.coerceIn(0f, 1f) else 0f
+    // Indigo and gold are complements, so a blend passes through khaki — which is
+    // why the sweep is a caller's decision rather than automatic.
+    val blendTo = lerp(tint, accent, mix)
+    val brush = Brush.linearGradient(listOf(tint, blendTo))
+    val faded = Brush.linearGradient(
+        listOf(tint.copy(alpha = 0.82f), blendTo.copy(alpha = 0.82f)),
+    )
     val transition = rememberInfiniteTransition(label = "markSheen")
     val sweep by transition.animateFloat(
         initialValue = 0f,
@@ -87,6 +90,8 @@ fun AgentMark(
         animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Restart),
         label = "sweep",
     )
+    // A highlight tinted for whichever surface it sits on.
+    val sheenColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.35f)
 
     Canvas(modifier = modifier.size(size)) {
         val unit = this.size.minDimension / 108f
@@ -106,11 +111,9 @@ fun AgentMark(
                     strokeWidth = 6f,
                     cap = StrokeCap.Round,
                 )
-                if (brandSweep) {
-                    drawCircle(brush, radius = 5.5f, center = Offset(54f, 21f))
-                } else {
-                    drawCircle(accent, radius = 5.5f, center = Offset(54f, 21f))
-                }
+                // The gold apex is a single deliberate accent, legible at any
+                // size, so it does not follow the sweep.
+                drawCircle(accent, radius = 5.5f, center = Offset(54f, 21f))
 
                 // Twin serpents.
                 drawPath(serpentPath(45f, 49f, 61f, 55f, 49f, 63f, 54f, 73f), brush, style = Stroke(5.5f, cap = StrokeCap.Round))
@@ -118,11 +121,13 @@ fun AgentMark(
 
                 if (sheen) {
                     // A travelling highlight sells "the agent is alive" without
-                    // adding a spinner next to the brand.
+                    // adding a spinner next to the brand. Derived from the scheme
+                    // rather than hardcoded white, because a white highlight is
+                    // invisible on the light surface — and light is the default.
                     val x = 18f + sweep * 74f
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(Color.White.copy(alpha = 0.35f), Color.Transparent),
+                            colors = listOf(sheenColor, Color.Transparent),
                             center = Offset(x, 30f),
                             radius = 26f,
                         ),
@@ -273,7 +278,7 @@ fun Modifier.pressScale(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
-        animationSpec = ExpressiveMotion.Specs.scale,
+        animationSpec = scaleSpec(),
         label = "pressScale",
     )
     return this.scale(scale)

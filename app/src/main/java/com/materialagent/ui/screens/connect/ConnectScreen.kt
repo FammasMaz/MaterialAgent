@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,9 +37,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,7 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -67,10 +64,12 @@ import com.materialagent.data.ServerProfile
 import com.materialagent.ui.AgentViewModel
 import com.materialagent.ui.components.AgentMark
 import com.materialagent.ui.components.ErrorBanner
+import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.cornerRadiusSpec
 import java.util.UUID
 
 /**
@@ -106,7 +105,7 @@ fun ConnectScreen(
     val collapse = (scroll.value / 320f).coerceIn(0f, 1f)
     val markSize by animateDpAsState(
         targetValue = (96 - 36 * collapse).dp,
-        animationSpec = ExpressiveMotion.Specs.cornerRadius,
+        animationSpec = cornerRadiusSpec(),
         label = "markSize",
     )
     val heroAlpha by animateFloatAsState(
@@ -184,14 +183,13 @@ fun ConnectScreen(
                         shape = RoundedCornerShape(50),
                     ),
             )
-            AgentMark(size = markSize, sheen = true, gradient = true)
+            AgentMark(size = markSize, sheen = true, gradient = true, sweepAmount = 1f - collapse)
         }
 
         Spacer(Modifier.height(8.dp))
         Text(
             text = "MaterialAgent",
             style = MaterialTheme.typography.displaySmall,
-            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -237,7 +235,7 @@ fun ConnectScreen(
                     supportingText = {
                         Text(
                             when {
-                                address.isBlank() -> "Host and port where `hermes serve` is listening."
+                                address.isBlank() -> "Host and port where hermes serve is listening."
                                 addressValid -> normalized.orEmpty()
                                 else -> "That does not look like an address I can dial."
                             },
@@ -264,18 +262,15 @@ fun ConnectScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = authMode == AuthMode.TOKEN,
-                        onClick = { authMode = AuthMode.TOKEN },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                    ) { Text("Access token") }
-                    SegmentedButton(
-                        selected = authMode == AuthMode.PASSWORD,
-                        onClick = { authMode = AuthMode.PASSWORD },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                    ) { Text("Password") }
-                }
+                ExpressiveToggleGroup(
+                    options = listOf("Access token", "Password"),
+                    selectedIndex = if (authMode == AuthMode.TOKEN) 0 else 1,
+                    onSelect = { index ->
+                        authMode = if (index == 0) AuthMode.TOKEN else AuthMode.PASSWORD
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    fillWidth = true,
+                )
 
                 if (authMode == AuthMode.TOKEN) {
                     OutlinedTextField(
@@ -328,7 +323,7 @@ fun ConnectScreen(
                     shape = RoundedCornerShape(50),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .heightIn(min = 52.dp),
                 ) {
                     if (connecting) {
                         LoadingIndicator(

@@ -22,6 +22,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -234,11 +235,11 @@ fun LoadingBlock(
 /** A thin inline divider with breathing room, used between settings groups. */
 @Composable
 fun GroupDivider(modifier: Modifier = Modifier) {
-    Spacer(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .padding(horizontal = 4.dp),
+    // Same trap as the settings divider: a `Spacer` that only sets a height draws
+    // nothing, so this rendered as an invisible 1dp gap.
+    HorizontalDivider(
+        modifier = modifier.padding(horizontal = 4.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
     )
 }
 

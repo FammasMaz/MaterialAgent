@@ -100,7 +100,15 @@ fun MaterialAgentTheme(
             colorScheme = scheme,
             typography = MaterialAgentTypography,
             shapes = MaterialAgentShapes,
-            motionScheme = MotionScheme.expressive(),
+            motionScheme = if (motionLevel == MotionLevel.REDUCED) {
+                // The theme's own motion scheme drives every Material component
+                // (switches, buttons, progress, the connected tray). Choosing
+                // "Reduced" used to leave all of them expressive, because only
+                // the app's own springs were branched on the setting.
+                MotionScheme.standard()
+            } else {
+                MotionScheme.expressive()
+            },
             content = content,
         )
     }
