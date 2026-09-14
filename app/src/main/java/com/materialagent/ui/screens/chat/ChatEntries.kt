@@ -399,7 +399,7 @@ fun ToolCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    val subtitle = tool.context.ifBlank { tool.preview.orEmpty() }
+                    val subtitle = toolSummary(tool)
                     if (subtitle.isNotBlank()) {
                         Text(
                             text = subtitle.replace('\n', ' '),
@@ -445,6 +445,16 @@ fun ToolCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         CodeBlock(language = null, code = result.take(4_000))
+                    } ?: run {
+                        if (tool.fromHistory && tool.args != null) {
+                            // History rows carry the call but not its output; say so
+                            // rather than looking like the app dropped it.
+                            Text(
+                                text = "History keeps the call, not its output.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -749,6 +759,28 @@ internal fun formatDuration(seconds: Double): String = when {
 internal fun clockTime(context: Context, epochSeconds: Double): String {
     val millis = (epochSeconds * 1000).toLong()
     return DateFormat.getTimeFormat(context).format(Date(millis))
+}
+
+/**
+ * A one-line gist of what a tool call is doing.
+ *
+ * The server's own `context` string is preferred because it is written for
+ * humans, but it is sometimes a stub (search_files previews as `*`), so keys
+ * that usually carry the intent are tried next.
+ */
+internal fun toolSummary(tool: ToolInfo): String {
+    val args = tool.args
+    if (args != null) {
+        val key = listOf(
+            "command", "cmd", "query", "pattern", "path", "file", "url",
+            "prompt", "task", "description", "name",
+        ).firstOrNull { args[it] != null }
+        if (key != null) {
+            val value = args[key].toString().trim('"')
+            if (value.isNotBlank() && value != "*") return value.replace('\n', ' ')
+        }
+    }
+    return tool.context.ifBlank { tool.preview.orEmpty() }.replace('\n', ' ')
 }
 
 /** Picks a plausible icon for a tool from its name — never a hard failure. */

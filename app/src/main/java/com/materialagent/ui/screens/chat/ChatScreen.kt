@@ -423,8 +423,13 @@ private fun ChatTopBar(
                     entry?.model?.let { model ->
                         MetaPill(text = model.substringAfterLast('/'))
                     }
-                    entry?.reasoningEffort?.takeIf { it.isNotBlank() && it != "none" }?.let {
-                        MetaPill(text = it)
+                    // The effort pill is the least informative of the three and
+                    // the header only has room for so much; while a turn runs it
+                    // steps aside for the live timer.
+                    if (!running) {
+                        entry?.reasoningEffort?.takeIf { it.isNotBlank() && it != "none" }?.let {
+                            MetaPill(text = it)
+                        }
                     }
                 }
             }

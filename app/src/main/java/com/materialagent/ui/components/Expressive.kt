@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
@@ -61,13 +62,20 @@ fun AgentMark(
     gradient: Boolean = true,
     sheen: Boolean = false,
 ) {
+    // Indigo and gold are complements, so blending them across a whole shape
+    // passes through khaki — which is what a 40dp session avatar cannot afford.
+    // A hero mark gets the full sweep; a small one stays indigo and wears the
+    // gold as a single deliberate accent on the apex, which is legible at any size.
     val accent = MaterialTheme.colorScheme.tertiary
-    val brush = if (gradient) {
+    val hero = size >= 72.dp
+    // Not `sweep`: that name already belongs to the sheen animation below.
+    val brandSweep = gradient && hero
+    val brush = if (brandSweep) {
         Brush.linearGradient(listOf(tint, accent))
     } else {
         Brush.linearGradient(listOf(tint, tint))
     }
-    val faded = if (gradient) {
+    val faded = if (brandSweep) {
         Brush.linearGradient(listOf(tint.copy(alpha = 0.82f), accent.copy(alpha = 0.82f)))
     } else {
         brush
@@ -98,7 +106,11 @@ fun AgentMark(
                     strokeWidth = 6f,
                     cap = StrokeCap.Round,
                 )
-                drawCircle(brush, radius = 5.5f, center = Offset(54f, 21f))
+                if (brandSweep) {
+                    drawCircle(brush, radius = 5.5f, center = Offset(54f, 21f))
+                } else {
+                    drawCircle(accent, radius = 5.5f, center = Offset(54f, 21f))
+                }
 
                 // Twin serpents.
                 drawPath(serpentPath(45f, 49f, 61f, 55f, 49f, 63f, 54f, 73f), brush, style = Stroke(5.5f, cap = StrokeCap.Round))
@@ -168,7 +180,11 @@ fun AgentOrb(
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
     active: Boolean = true,
+    // Gold repeats as a second stop so the muddy blend occupies only the outer
+    // rim of the shape instead of its whole body.
     colors: List<Color> = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.primary,
         MaterialTheme.colorScheme.primary,
         MaterialTheme.colorScheme.tertiary,
     ),

@@ -334,6 +334,27 @@ private fun parseMarkdown(text: String): List<Block> {
 }
 
 /** Inline spans: `code`, **bold**, *italic*, ~~strike~~, [text](url). */
+/**
+ * Markdown's underscore rules: `_` only opens emphasis at a word boundary and
+ * only closes it at one. Without this, identifiers like `snake_case` or
+ * `__init__.py` get eaten by the emphasis parser.
+ */
+private fun startsEmphasis(source: String, index: Int, tokenLength: Int): Boolean {
+    val before = source.getOrNull(index - 1)
+    val after = source.getOrNull(index + tokenLength)
+    return before?.isLetterOrDigit() != true && after?.isWhitespace() != true
+}
+
+private fun endsEmphasis(source: String, index: Int, tokenLength: Int): Boolean {
+    val before = source.getOrNull(index - 1)
+    val after = source.getOrNull(index + tokenLength)
+    return if (tokenLength == 1) {
+        before?.isWhitespace() != true && after?.isLetterOrDigit() != true
+    } else {
+        after?.isLetterOrDigit() != true
+    }
+}
+
 private fun inline(source: String): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < source.length) {
@@ -353,7 +374,12 @@ private fun inline(source: String): AnnotatedString = buildAnnotatedString {
 
             source.startsWith("**", i) || source.startsWith("__", i) -> {
                 val token = source.substring(i, i + 2)
-                val end = source.indexOf(token, startIndex = i + 2)
+                // `__x__` inside a word is not emphasis in Markdown, and in this
+                // app the "words" are usually identifiers like __init__.py.
+                val end = if (token == "__" && !startsEmphasis(source, i, 2)) -1
+                else source.indexOf(token, startIndex = i + 2).let { raw ->
+                    if (raw == -1 || !endsEmphasis(source, raw, 2)) -1 else raw
+                }
                 if (end == -1) {
                     append(char)
                     i += 1
@@ -379,7 +405,16 @@ private fun inline(source: String): AnnotatedString = buildAnnotatedString {
             }
 
             char == '*' || char == '_' -> {
-                val end = source.indexOf(char, startIndex = i + 1)
+                val candidate = source.indexOf(char, startIndex = i + 1)
+                // An underscore that sits inside a word is literal text, not an
+                // emphasis marker: `snake_case_name` and `_private` must survive
+                // untouched, which is most of what an agent prints.
+                val end = when {
+                    candidate <= i + 1 -> candidate
+                    char == '_' && !startsEmphasis(source, i, 1) -> -1
+                    char == '_' && !endsEmphasis(source, candidate, 1) -> -1
+                    else -> candidate
+                }
                 if (end <= i + 1) {
                     append(char)
                     i += 1

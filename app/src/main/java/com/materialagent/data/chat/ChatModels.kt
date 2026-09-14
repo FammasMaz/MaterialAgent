@@ -26,6 +26,8 @@ data class ToolInfo(
     val durationS: Double?,
     val running: Boolean,
     val preview: String? = null,
+    /** True when this call was rebuilt from session history, which omits output. */
+    val fromHistory: Boolean = false,
 )
 
 data class TodoItem(

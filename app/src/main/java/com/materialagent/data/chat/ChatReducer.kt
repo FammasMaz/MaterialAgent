@@ -377,6 +377,7 @@ object ChatReducer {
                             context = row.toolContext.orEmpty(),
                             args = row.toolArgs,
                             result = null,
+                            fromHistory = true,
                             durationS = null,
                             running = false,
                         ),

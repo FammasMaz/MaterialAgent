@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 class ChatViewModel(
     private val container: AppContainer,
     private val storedSessionId: String?,
+    private val title: String = "",
 ) : ViewModel() {
 
     val transcript: StateFlow<ChatTranscript> = container.chat.transcript
@@ -52,7 +53,7 @@ class ChatViewModel(
                 return@launch
             }
             if (storedSessionId != null) {
-                container.chat.resume(storedSessionId).onFailure { error ->
+                container.chat.resume(storedSessionId, titleHint = title).onFailure { error ->
                     _notice.value = error.message ?: "Could not open that conversation"
                 }
             }

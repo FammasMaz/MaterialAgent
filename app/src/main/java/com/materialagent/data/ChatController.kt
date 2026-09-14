@@ -75,8 +75,14 @@ class ChatController(
         observe(sessionId)
     }
 
-    /** Resumes a durable session by its stored id. */
-    suspend fun resume(storedId: String): Result<Unit> {
+    /**
+     * Resumes a durable session by its stored id.
+     *
+     * [titleHint] is what the caller already knows — the row the user tapped.
+     * The resume payload carries the title under `info`, not at the top level,
+     * so without this fallback a reopened conversation reads "Conversation".
+     */
+    suspend fun resume(storedId: String, titleHint: String? = null): Result<Unit> {
         detach()
         _transcript.value = ChatTranscript(loadingHistory = true)
         return sessions.resume(storedId).fold(
@@ -86,7 +92,10 @@ class ChatController(
                     rows = resumed.messages,
                     sessionId = resumed.sessionId,
                     storedSessionId = resumed.storedSessionId ?: storedId,
-                    title = resumed.title,
+                    title = resumed.title.ifBlank {
+                        resumed.info?.title?.takeIf { it.isNotBlank() }
+                            ?: titleHint.orEmpty()
+                    },
                     info = resumed.info,
                 )
                 observe(resumed.sessionId)

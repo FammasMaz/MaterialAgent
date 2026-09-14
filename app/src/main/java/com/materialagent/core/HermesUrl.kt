@@ -27,10 +27,15 @@ object HermesUrl {
         val trimmed = input.trim().trimEnd('/')
         if (trimmed.isEmpty()) return null
 
-        val withScheme = when {
-            trimmed.startsWith("http://", true) || trimmed.startsWith("https://", true) -> trimmed
-            trimmed.startsWith("ws://", true) -> "http://" + trimmed.removePrefix("ws://")
-            trimmed.startsWith("wss://", true) -> "https://" + trimmed.removePrefix("wss://")
+        // Strip by length, not by exact prefix text: the scheme check above is
+        // case-insensitive, so `WSS://host` must lose the same seven characters
+        // as `wss://host` rather than surviving the strip and becoming a host.
+        val scheme = trimmed.substringBefore("://", "").lowercase()
+        val rest = if (scheme.isNotEmpty()) trimmed.substring(scheme.length + 3) else trimmed
+        val withScheme = when (scheme) {
+            "http", "https" -> "$scheme://$rest"
+            "ws" -> "http://$rest"
+            "wss" -> "https://$rest"
             else -> "http://$trimmed"
         }
 
