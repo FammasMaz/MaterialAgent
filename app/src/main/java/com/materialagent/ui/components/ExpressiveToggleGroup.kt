@@ -3,12 +3,14 @@ package com.materialagent.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -21,12 +23,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isFinite
 
 import com.materialagent.ui.theme.AgentShapes
 
@@ -43,10 +50,10 @@ import com.materialagent.ui.theme.AgentShapes
  * older Material 3 component) draws separate outlines for each item and loses
  * that fusion, so it is deliberately not used for enumerated preferences.
  *
- * Behaviour follows the reference implementation: a `RadioButton` role so
- * TalkBack announces the set correctly, a haptic *before* the selection changes,
- * and labels that never wrap (a longer option ellipsises rather than making the
- * row taller than the rest of the screen).
+ * Behaviour follows the reference implementation: a `RadioButton` role so TalkBack
+ * announces the set correctly, no selection change (and no cue from the caller) when
+ * the segment is already chosen, and labels that are measured rather than trusted —
+ * see [splitWouldClip].
  *
  * The tray and the items are one geometry, not two guesses: every item is pinned to
  * [AgentShapes.toggleItemHeight] and the tray's radius comes from
@@ -80,44 +87,78 @@ fun ExpressiveToggleGroup(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     contentPadding: Dp = AgentShapes.toggleTrayInset,
     /**
-     * `true` splits the width evenly between the options — right for two or
-     * three short labels (Light/Dark/System), where a ragged edge would look
-     * accidental. `false` (the default) lets each button take the width its
-     * label needs and scrolls the row if the set does not fit, so a long label
-     * is shown in full rather than truncated to "Conversati…".
+     * Propose an even split across the tray — right for two or three short labels,
+     * where a ragged edge would look accidental. It is a proposal rather than an
+     * instruction: the group measures first and falls back to a scrolling row when
+     * the split would clip a label, so "Off/Subtle/Normal/Strong" at a large font
+     * scale scrolls instead of truncating to "Stro…".
      */
     fillWidth: Boolean = false,
 ) {
     if (options.isEmpty()) return
     val scroll = rememberScrollState()
-    Row(
-        modifier = modifier
-            .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
-            .then(if (fillWidth) Modifier else Modifier.horizontalScroll(scroll))
-            .clip(RoundedCornerShape(AgentShapes.toggleTray))
-            .background(containerColor)
-            .padding(contentPadding),
-        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        options.forEachIndexed { index, option ->
-            val shapes = when (index) {
-                0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+    BoxWithConstraints(modifier) {
+        val splitEvenly = fillWidth && !splitWouldClip(options, maxWidth, contentPadding)
+        Row(
+            modifier = Modifier
+                .then(if (splitEvenly) Modifier.fillMaxWidth() else Modifier)
+                .then(if (splitEvenly) Modifier else Modifier.horizontalScroll(scroll))
+                .clip(RoundedCornerShape(AgentShapes.toggleTray))
+                .background(containerColor)
+                .padding(contentPadding),
+            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            options.forEachIndexed { index, option ->
+                val shapes = when (index) {
+                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                }
+                // A lone option is both leading and trailing; the middle shape is the
+                // one that reads as a single pill rather than a half-open outline.
+                val single = options.size == 1
+                ToggleGroupItem(
+                    checked = index == selectedIndex,
+                    shapes = if (single) ButtonGroupDefaults.connectedMiddleButtonShapes() else shapes,
+                    expand = splitEvenly,
+                    onClick = {
+                        if (index != selectedIndex) onSelect(index)
+                    },
+                ) { label(option, index == selectedIndex) }
             }
-            // A lone option is both leading and trailing; the middle shape is the
-            // one that reads as a single pill rather than a half-open outline.
-            val single = options.size == 1
-            ToggleGroupItem(
-                checked = index == selectedIndex,
-                shapes = if (single) ButtonGroupDefaults.connectedMiddleButtonShapes() else shapes,
-                expand = fillWidth,
-                onClick = {
-                    if (index != selectedIndex) onSelect(index)
-                },
-            ) { label(option, index == selectedIndex) }
         }
+    }
+}
+
+/**
+ * Whether an even split of [options] across [available] width would clip any label.
+ *
+ * Both label styles are measured — the selected item wears the emphasized one, which
+ * is heavier and therefore wider — and the item's own inset inside the button is the
+ * library's own token for this button height, so neither the threshold nor the padding
+ * is a second guess at what [ToggleButton] is about to draw.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun splitWouldClip(options: List<String>, available: Dp, contentPadding: Dp): Boolean {
+    if (!available.isFinite) return true
+    val spacing = ButtonGroupDefaults.ConnectedSpaceBetween * (options.size - 1)
+    val perItem = (available - contentPadding * 2 - spacing) / options.size
+    val density = LocalDensity.current
+    val inset = with(density) {
+        val padding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight)
+        with(LocalLayoutDirection.current) {
+            padding.calculateLeftPadding(this) + padding.calculateRightPadding(this)
+        }.toPx()
+    }
+    val perItemPx = with(density) { perItem.toPx() }
+    val measurer = rememberTextMeasurer()
+    val styles = listOf(MaterialTheme.typography.labelLarge, MaterialTheme.typography.labelLargeEmphasized)
+    return options.any { option ->
+        styles.maxOf { style ->
+            measurer.measure(AnnotatedString(option), style = style, maxLines = 1).size.width
+        } + inset > perItemPx
     }
 }
 
