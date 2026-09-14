@@ -469,7 +469,10 @@ private fun ConnectionCard(
                 serverVersion?.let { MetaPill(text = "v$it") }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.padding(start = 34.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 when (status) {
                     is ConnectionStatus.Connected -> TextButton(onClick = onDisconnect) {
                         Text("Disconnect")
@@ -511,6 +514,10 @@ private fun SettingsDivider() {
     )
 }
 
+// The label column inside a settings row: a 20dp leading icon plus a 12dp gap.
+// Controls that belong to a label are indented by this much so both share an edge.
+private val RowLabelIndent = 32.dp
+
 @Composable
 private fun SettingsRow(
     icon: ImageVector,
@@ -544,7 +551,11 @@ private fun SettingsRow(
         }
         if (content != null) {
             Spacer(Modifier.height(10.dp))
-            content()
+            // Indented to the label column: 20dp icon + 12dp gap. Without this the
+            // control starts at the card's content edge while its own label starts
+            // 32dp further right, which reads as a misaligned button — the whole
+            // point of the paired label and control is that they share a left edge.
+            Column(modifier = Modifier.padding(start = RowLabelIndent)) { content() }
         }
     }
 }

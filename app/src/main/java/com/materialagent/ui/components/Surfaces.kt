@@ -124,8 +124,10 @@ fun SectionHeader(
 ) {
     Row(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 6.dp),
+            // No horizontal padding of its own: callers already inset their
+            // content by 16dp, and the extra 4dp here made every section header
+            // sit 4dp right of the screen title above it.
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

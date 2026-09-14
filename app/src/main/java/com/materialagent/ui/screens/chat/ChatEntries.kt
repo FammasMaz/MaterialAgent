@@ -143,12 +143,11 @@ fun UserBubble(
         }
         if (timestamp != null) {
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = clockTime(context, timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 6.dp),
-            )
+            // A pill, like the agent's own timestamp. This was a bare label with a
+            // 6dp end padding, so the same information was drawn two different ways
+            // in the same conversation — and the bare label sat 6dp inside the
+            // bubble's right edge instead of lining up with it.
+            MetaPill(text = clockTime(context, timestamp))
         }
     }
 }
