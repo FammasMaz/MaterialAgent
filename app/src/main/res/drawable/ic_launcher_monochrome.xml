@@ -1,44 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Single-colour layer for themed icons (Android 13+). Same geometry as the
-     full mark; the system tints it with the wallpaper palette. -->
+<!-- Themed-icon silhouette (Android 13+). The system tints this layer with
+     the wallpaper palette, so it must be a flat opaque alpha mask: white
+     fills and strokes only, no <background>, no colour references, no tint.
+     Geometry is identical to ic_launcher_foreground.xml. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
-    android:viewportHeight="108"
-    android:tint="#FFFFFF">
+    android:viewportHeight="108">
 
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M53,42 L24,31 L27.5,41 L47,47.5 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M55,42 L84,31 L80.5,41 L61,47.5 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M53,50 L30,43 L33,52 L48,56.5 Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M55,50 L78,43 L75,52 L60,56.5 Z" />
+        android:pathData="M56,43 L74,36 L71,49 L56,55 Z M52,43 L34,36 L37,49 L52,55 Z" />
 
     <path
-        android:pathData="M54,33 L54,87"
+        android:pathData="M54,46 L54,75.5"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
+        android:strokeWidth="7"
         android:strokeLineCap="round" />
+
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,21 m-5.5,0 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0" />
-    <path
-        android:pathData="M45,49 C61,55 49,63 54,73"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5.5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-    <path
-        android:pathData="M63,49 C47,55 59,63 54,73"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5.5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
+        android:pathData="M54,33.5 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" />
 </vector>
