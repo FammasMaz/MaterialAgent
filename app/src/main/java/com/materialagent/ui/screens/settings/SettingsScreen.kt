@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material.icons.rounded.ViewStream
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -272,6 +273,17 @@ fun SettingsScreen(
                     onCheckedChange = { value ->
                         cue(HapticCue.SENT)
                         app.update { it.copy(scrollHaptics = value) }
+                    },
+                )
+                SettingsDivider()
+                SwitchRow(
+                    icon = Icons.Rounded.ViewStream,
+                    title = "Group sessions",
+                    subtitle = "Fold repeat runs of a cron job into one entry",
+                    checked = settings.groupSessions,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.SENT)
+                        app.update { it.copy(groupSessions = value) }
                     },
                 )
                 SettingsDivider()

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** How the sessions list is currently filtered. */
@@ -41,6 +42,15 @@ class SessionsViewModel(private val container: AppContainer) : ViewModel() {
     val actionError: StateFlow<String?> = _actionError.asStateFlow()
 
     private val _busyId = MutableStateFlow<String?>(null)
+
+    /**
+     * Which groups the user has folded away, keyed by [SessionSummary.groupKey].
+     *
+     * It lives here, not in the row, because a LazyColumn disposes rows that
+     * scroll off screen — state kept there would be forgotten on the way back up.
+     */
+    private val _collapsedGroups = MutableStateFlow<Set<String>>(emptySet())
+    val collapsedGroups: StateFlow<Set<String>> = _collapsedGroups.asStateFlow()
 
     /** The stored session id currently being renamed/deleted, so the row can show progress. */
     val busyId: StateFlow<String?> = _busyId.asStateFlow()
@@ -75,6 +85,10 @@ class SessionsViewModel(private val container: AppContainer) : ViewModel() {
 
     fun filterBy(filter: SessionFilter) {
         _filter.value = filter
+    }
+
+    fun toggleGroup(groupKey: String) {
+        _collapsedGroups.update { if (groupKey in it) it - groupKey else it + groupKey }
     }
 
     fun refresh() {

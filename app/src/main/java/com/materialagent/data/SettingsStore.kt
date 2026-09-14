@@ -67,6 +67,7 @@ class SettingsStore(context: Context) {
             showToolCalls = prefs[SHOW_TOOLS] ?: d.showToolCalls,
             streamingHaptics = prefs[STREAMING_HAPTICS] ?: d.streamingHaptics,
             scrollHaptics = prefs[SCROLL_HAPTICS] ?: d.scrollHaptics,
+            groupSessions = prefs[GROUP_SESSIONS] ?: d.groupSessions,
             sendOnEnter = prefs[SEND_ON_ENTER] ?: d.sendOnEnter,
             autoCheckUpdates = prefs[AUTO_CHECK_UPDATES] ?: d.autoCheckUpdates,
             skippedVersion = prefs[SKIPPED_VERSION]?.takeIf { it.isNotBlank() } ?: d.skippedVersion,
@@ -133,6 +134,7 @@ class SettingsStore(context: Context) {
             prefs[SHOW_TOOLS] = next.showToolCalls
             prefs[STREAMING_HAPTICS] = next.streamingHaptics
             prefs[SCROLL_HAPTICS] = next.scrollHaptics
+            prefs[GROUP_SESSIONS] = next.groupSessions
             prefs[SEND_ON_ENTER] = next.sendOnEnter
             prefs[AUTO_CHECK_UPDATES] = next.autoCheckUpdates
             prefs[SKIPPED_VERSION] = next.skippedVersion.orEmpty()
@@ -179,6 +181,7 @@ class SettingsStore(context: Context) {
         val SHOW_TOOLS = booleanPreferencesKey("show_tool_calls")
         val STREAMING_HAPTICS = booleanPreferencesKey("streaming_haptics")
         val SCROLL_HAPTICS = booleanPreferencesKey("scroll_haptics")
+        val GROUP_SESSIONS = booleanPreferencesKey("group_sessions")
         val SEND_ON_ENTER = booleanPreferencesKey("send_on_enter")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
         val SKIPPED_VERSION = stringPreferencesKey("skipped_version")

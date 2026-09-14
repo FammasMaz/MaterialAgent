@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +68,8 @@ import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalScrollHaptics
+import com.materialagent.ui.theme.placementSpec
+import com.materialagent.ui.theme.scaleSpec
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -94,11 +98,40 @@ fun SessionsScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
     val actionError by viewModel.actionError.collectAsStateWithLifecycle()
     val busyId by viewModel.busyId.collectAsStateWithLifecycle()
+    val collapsedGroups by viewModel.collapsedGroups.collectAsStateWithLifecycle()
     val status by app.status.collectAsStateWithLifecycle()
+    val settings by app.settings.collectAsStateWithLifecycle()
 
     var renaming by remember { mutableStateOf<SessionSummary?>(null) }
     var deleting by remember { mutableStateOf<SessionSummary?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+
+    // One row's wiring, shared by the flat and grouped lists so the two paths
+    // cannot drift apart.
+    val sessionRow: @Composable (SessionSummary) -> Unit = { session ->
+        SessionCard(
+            session = session,
+            busy = busyId == session.id,
+            onOpen = {
+                cue(HapticCue.SENT)
+                onOpenSession(session.id)
+            },
+            onRename = {
+                cue(HapticCue.TOOL_START)
+                renaming = session
+            },
+            onDelete = {
+                cue(HapticCue.NEEDS_ATTENTION)
+                deleting = session
+            },
+            onBranch = {
+                cue(HapticCue.TOOL_START)
+                viewModel.branch(session.id) { newId ->
+                    onOpenSession(newId)
+                }
+            },
+        )
+    }
 
     LaunchedEffect(loading) {
         if (refreshing && !loading) refreshing = false
@@ -213,29 +246,40 @@ fun SessionsScreen(
                         )
                     }
 
-                    else -> items(sessions, key = { it.id }) { session ->
-                        SessionCard(
-                            session = session,
-                            busy = busyId == session.id,
-                            onOpen = {
-                                cue(HapticCue.SENT)
-                                onOpenSession(session.id)
-                            },
-                            onRename = {
-                                cue(HapticCue.TOOL_START)
-                                renaming = session
-                            },
-                            onDelete = {
-                                cue(HapticCue.NEEDS_ATTENTION)
-                                deleting = session
-                            },
-                            onBranch = {
-                                cue(HapticCue.TOOL_START)
-                                viewModel.branch(session.id) { newId ->
-                                    onOpenSession(newId)
+                    // Grouped mode folds the same rows under a header per group;
+                    // the list itself is unchanged when the preference is off.
+                    else -> if (settings.groupSessions) {
+                        val rows = groupSessions(sessions, collapsedGroups)
+                        items(rows, key = { it.key }) { row ->
+                            when (row) {
+                                is SessionListItem.GroupHeader -> SessionGroupHeaderRow(
+                                    header = row,
+                                    onToggle = {
+                                        cue(HapticCue.SENT)
+                                        viewModel.toggleGroup(row.groupKey)
+                                    },
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = ExpressiveMotion.Specs.alpha,
+                                        placementSpec = placementSpec(),
+                                        fadeOutSpec = null,
+                                    ),
+                                )
+
+                                is SessionListItem.Row -> Box(
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = ExpressiveMotion.Specs.alpha,
+                                        placementSpec = placementSpec(),
+                                        fadeOutSpec = null,
+                                    ),
+                                ) {
+                                    sessionRow(row.session)
                                 }
-                            },
-                        )
+                            }
+                        }
+                    } else {
+                        items(sessions, key = { it.id }) { session ->
+                            sessionRow(session)
+                        }
                     }
                 }
             }
@@ -484,6 +528,82 @@ private fun SessionCard(
             }
         }
     }
+}
+
+/**
+ * A collapsible header for one group of sessions.
+ *
+ * The chevron is a single arrow that rotates rather than two icons that swap,
+ * so expanding and collapsing read as the same object turning over.
+ */
+@Composable
+private fun SessionGroupHeaderRow(
+    header: SessionListItem.GroupHeader,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rotation by animateFloatAsState(
+        targetValue = if (header.collapsed) -90f else 0f,
+        animationSpec = scaleSpec(),
+        label = "groupChevron",
+    )
+    Surface(
+        onClick = onToggle,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (header.isCron) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(30.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+            }
+            Text(
+                text = header.label,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            MetaPill(text = runCountLabel(header.runCount, header.isCron))
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                imageVector = Icons.Rounded.ExpandMore,
+                contentDescription = if (header.collapsed) {
+                    "Expand ${header.label}"
+                } else {
+                    "Collapse ${header.label}"
+                },
+                modifier = Modifier
+                    .size(22.dp)
+                    .rotate(rotation),
+            )
+        }
+    }
+}
+
+/** "3 runs" for an automation, "3 sessions" for a source group. */
+private fun runCountLabel(count: Int, isCron: Boolean): String = if (isCron) {
+    "$count run${if (count == 1) "" else "s"}"
+} else {
+    "$count session${if (count == 1) "" else "s"}"
 }
 
 @Composable

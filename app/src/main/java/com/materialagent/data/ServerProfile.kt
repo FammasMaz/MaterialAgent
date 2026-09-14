@@ -41,6 +41,9 @@ data class AppSettings(
     val showToolCalls: Boolean = true,
     val streamingHaptics: Boolean = true,
     val scrollHaptics: Boolean = true,
+    // Automation runs arrive in look-alike bursts; folding them by default keeps
+    // the inbox readable without hiding anything, since the group expands.
+    val groupSessions: Boolean = true,
     val sendOnEnter: Boolean = false,
     val autoCheckUpdates: Boolean = true,
     // The version the user asked not to be told about again. Null, not "": the
