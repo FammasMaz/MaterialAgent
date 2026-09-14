@@ -357,13 +357,21 @@ fun ChatScreen(
                 enabled = connection !is ConnectionStatus.Failed,
                 onDraftChange = viewModel::updateDraft,
                 onSend = {
+                    // The one interaction the user repeats all day, and the one that
+                    // most needs an answer: "the app took it".
+                    cue(HapticCue.SENT)
                     viewModel.send()
                     // Answering and reading both want the transcript, and a
                     // blocking card can appear immediately after a send — the
                     // keyboard would sit on top of it.
                     focusManager.clearFocus()
                 },
-                onSteer = viewModel::steer,
+                onSteer = {
+                    // Steering is a send that the running turn will pick up, so it
+                    // gets the same acknowledgement rather than silence.
+                    cue(HapticCue.SENT)
+                    viewModel.steer()
+                },
                 onStop = {
                     cue(HapticCue.INTERRUPTED)
                     viewModel.interrupt()
