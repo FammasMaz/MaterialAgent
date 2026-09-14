@@ -1,50 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- MaterialAgent mark: geometric caduceus — the staff, twin serpents and
-     wings of Hermes, reduced to strokes and blades so it stays legible at
-     24 dp and reads as a single confident gesture at 108 dp. -->
+<!-- MaterialAgent launcher mark: the winged staff of Hermes reduced to three
+     flat shapes that read at launcher size.
+
+     Sized to a 50 dp read (x 34..74, y 29..79) inside the 108 dp adaptive
+     canvas, centred on (54, 54), so it sits inside the 66 dp safe zone with
+     margin instead of filling it and being clipped by the launcher mask.
+
+     Simplified from eight paths: the four wing blades became one bold blade
+     per side, and the two thin S-curve serpents were dropped, with the staff
+     thickened 6 -> 7 to carry their weight. At launcher size those thin
+     strokes merged into a single blob. The wing blades keep the original
+     21-degree sweep (11 up over 29 out) so the mark stays the same mark.
+     Kept as brand identifiers: the wing pair, the vertical staff, the orb. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Wings (blades), gold -->
+    <!-- Wing pair: one flat upswept blade per side, mirrored across x=54 and
+         emerging from the top of the shaft. Roots sit at x=56 / x=52, buried
+         under the staff stroke, so each blade meets the shaft with no seam. -->
     <path
-        android:fillColor="#FFC24B"
-        android:pathData="M53,42 L24,31 L27.5,41 L47,47.5 Z" />
-    <path
-        android:fillColor="#FFC24B"
-        android:pathData="M55,42 L84,31 L80.5,41 L61,47.5 Z" />
-    <path
-        android:fillColor="#F5B23C"
-        android:pathData="M53,50 L30,43 L33,52 L48,56.5 Z" />
-    <path
-        android:fillColor="#F5B23C"
-        android:pathData="M55,50 L78,43 L75,52 L60,56.5 Z" />
+        android:fillColor="#F5C24B"
+        android:pathData="M56,43 L74,36 L71,49 L56,55 Z M52,43 L34,36 L37,49 L52,55 Z" />
 
-    <!-- Staff -->
+    <!-- Staff: single thick stroke, round caps. -->
     <path
-        android:pathData="M54,33 L54,87"
+        android:pathData="M54,46 L54,75.5"
         android:strokeColor="#FFE9C0"
-        android:strokeWidth="6"
+        android:strokeWidth="7"
         android:strokeLineCap="round" />
 
-    <!-- Apex -->
+    <!-- Apex orb, r=4.5. -->
     <path
-        android:fillColor="#FFE9C0"
-        android:pathData="M54,21 m-5.5,0 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0" />
-
-    <!-- Twin serpents -->
-    <path
-        android:pathData="M45,49 C61,55 49,63 54,73"
-        android:strokeColor="#FFC24B"
-        android:strokeWidth="5.5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
-    <path
-        android:pathData="M63,49 C47,55 59,63 54,73"
-        android:strokeColor="#FFC24B"
-        android:strokeWidth="5.5"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000" />
+        android:fillColor="#F5C24B"
+        android:pathData="M54,33.5 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" />
 </vector>
