@@ -1,10 +1,12 @@
 package com.materialagent.live
 
 import com.materialagent.core.ConnectionState
+import com.materialagent.core.HermesJson
 import com.materialagent.core.HermesClient
 import com.materialagent.core.HermesRpcException
 import com.materialagent.core.InteractionParams
 import com.materialagent.core.arr
+import com.materialagent.core.arrOrNull
 import com.materialagent.core.bool
 import com.materialagent.core.int
 import com.materialagent.core.obj
@@ -16,6 +18,7 @@ import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.core.model.SessionSummary
 import com.materialagent.core.model.Usage
+import com.materialagent.data.MemoryCookieJar
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URI
@@ -33,7 +36,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -321,10 +328,13 @@ class HermesLiveTest {
                 }
 
                 // Hard drop, then a fresh connect — what the app does when a
-                // mobile network blinks.
+                // mobile network blinks. A gated gateway hands out single-use
+                // tickets, so the redial mints its own rather than replaying the
+                // one the first socket consumed (which is what the app's dial
+                // does too: `dial()` resolves the credential every attempt).
                 client.disconnect("test drop")
                 delay(2_000)
-                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                client.connect(configuredGateway(), openingTimeoutMs = 30_000)
                 waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
                 note("reconnect  ok")
 
@@ -453,7 +463,30 @@ class HermesLiveTest {
                 )
 
                 // ...and the runtime id is what actually works.
-                val branched = client.request("session.branch", idParams(runtime), timeoutMs = REQUEST_TIMEOUT_MS)
+                //
+                // A finished turn reaches the persisted display projection a
+                // moment after it reaches `session.list`, and `session.branch`
+                // snapshots that projection — so branching the instant the row
+                // appears can be told "nothing to branch". Retry rather than
+                // race it, and say what we waited for if it never lands.
+                var branched: JsonObject? = null
+                var lastBranchFailure: Throwable? = null
+                val branchDeadline = System.currentTimeMillis() + 20_000
+                while (branched == null && System.currentTimeMillis() < branchDeadline) {
+                    val attempt = runCatching {
+                        client.request("session.branch", idParams(runtime), timeoutMs = REQUEST_TIMEOUT_MS)
+                    }
+                    branched = attempt.getOrNull()
+                    if (branched == null) {
+                        lastBranchFailure = attempt.exceptionOrNull()
+                        delay(1_000)
+                    }
+                }
+                if (branched == null) {
+                    throw AssertionError(
+                        "branch was never accepted for the source session: ${lastBranchFailure?.message}",
+                    )
+                }
                 branchStored = branched.str("stored_session_id")
                 branchRuntime = branched.str("session_id")
                 note(
@@ -813,15 +846,21 @@ class HermesLiveTest {
      * Deliberately *not* an HTTP health check — half a gateway (port open, no
      * handshake) should fail loudly, and only a dead port should skip.
      */
-    private fun gatewayReachable(wsUrl: String): Boolean = runCatching {
-        val uri = URI(wsUrl)
-        val port = when {
-            uri.port != -1 -> uri.port
-            uri.scheme == "wss" -> 443
-            else -> 80
+    /** One HTTP reply, body already read so the connection can be released. */
+    private class HttpReply(val code: Int, val body: String)
+
+    private fun get(http: OkHttpClient, url: String): HttpReply =
+        http.newCall(Request.Builder().url(url).get().build()).execute().use {
+            HttpReply(it.code, it.body?.string().orEmpty())
         }
-        Socket().use { it.connect(InetSocketAddress(uri.host, port), PROBE_TIMEOUT_MS.toInt()) }
-    }.isSuccess
+
+    private fun postJson(http: OkHttpClient, url: String, body: JsonObject): HttpReply =
+        http.newCall(
+            Request.Builder()
+                .url(url)
+                .post(body.toString().toRequestBody("application/json".toMediaType()))
+                .build(),
+        ).execute().use { HttpReply(it.code, it.body?.string().orEmpty()) }
 
     private fun failed(message: String): Nothing = throw AssertionError(message)
 
@@ -1005,6 +1044,109 @@ class HermesLiveTest {
         }
     }
 
+
+    /**
+     * The gated path a remote client has to walk, and the reason a phone can
+     * reach a self-hosted gateway at all.
+     *
+     * Declaring `dashboard.public_url` — required, because the gateway rejects
+     * any Host header it has not been told to trust — switches it to
+     * authenticated mode: `/api/health` reports `auth_required: true` and a bare
+     * `?token=` is refused. The app's password mode then has to walk exactly
+     * these steps: discover the provider, POST the credentials, keep the session
+     * cookie, mint a single-use ticket with that cookie, and upgrade the socket
+     * with `?ticket=`. Getting any one of them wrong surfaces to the user as
+     * "Sign-in expired. Try again."
+     *
+     * Credentials come from `HERMES_TEST_USER` / `HERMES_TEST_PASSWORD` so the
+     * repository never holds one. Without them the test skips, like the rest of
+     * this class.
+     */
+    @Test(timeout = 180_000)
+    fun passwordLoginMintsAWorkingTicket() {
+        val base = configuredHttpBase()
+        val user = System.getenv("HERMES_TEST_USER")?.trim().orEmpty()
+        val pass = System.getenv("HERMES_TEST_PASSWORD").orEmpty()
+        assumeTrue(
+            "Skipping: set HERMES_TEST_USER and HERMES_TEST_PASSWORD to run this test.",
+            user.isNotEmpty() && pass.isNotEmpty(),
+        )
+        assumeTrue("Skipping: nothing listening at $base", gatewayReachable(wsFor(base)))
+
+        // The app's own client shape, including the cookie jar the ticket step depends on.
+        val http = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .cookieJar(MemoryCookieJar())
+            .build()
+
+        try {
+            // 1. Discovery. Until this succeeds the connect screen cannot offer a password field.
+            val providers = get(http, "$base/api/auth/providers")
+            assertEquals("provider discovery failed: HTTP ${providers.code} ${providers.body.take(200)}", 200, providers.code)
+            val provider = HermesJson.parseToJsonElement(providers.body).objOrNull()
+                ?.get("providers")?.arrOrNull()
+                ?.mapNotNull { it.objOrNull() }
+                ?.firstOrNull { it.str("supports_password")?.equals("true", ignoreCase = true) == true }
+                ?.str("name")
+            assertNotNull("no password provider advertised at $base", provider)
+            println("provider     $provider")
+
+            fun login(password: String) = postJson(
+                http,
+                "$base/auth/password-login",
+                buildJsonObject {
+                    put("provider", JsonPrimitive(provider!!))
+                    put("username", JsonPrimitive(user))
+                    put("password", JsonPrimitive(password))
+                    put("next", JsonPrimitive("/"))
+                },
+            )
+
+            // 2. A wrong password must fail, or nothing is really being checked.
+            val wrong = login("$pass-wrong-on-purpose")
+            assertEquals("a wrong password must not sign in", 401, wrong.code)
+            println("wrong pass   HTTP ${wrong.code}")
+
+            // 3. The real sign-in, which has to leave a session cookie behind.
+            val signedIn = login(pass)
+            assertTrue(
+                "sign-in failed: HTTP ${signedIn.code} ${signedIn.body.take(200)}",
+                signedIn.code in 200..299,
+            )
+            val cookies = http.cookieJar.loadForRequest(base.toHttpUrl())
+            println("sign-in      HTTP ${signedIn.code}, session cookies kept: ${cookies.size}")
+            assertTrue("sign-in did not leave a session cookie for the ticket step", cookies.isNotEmpty())
+
+            // 4. Mint the single-use ticket with that cookie.
+            val minted = postJson(http, "$base/api/auth/ws-ticket", buildJsonObject {})
+            assertTrue(
+                "ticket minting failed: HTTP ${minted.code} ${minted.body.take(200)}",
+                minted.code in 200..299,
+            )
+            val ticket = HermesJson.parseToJsonElement(minted.body).objOrNull()?.str("ticket")
+            assertNotNull("the server did not return a ticket", ticket)
+            println("ticket       ${ticket!!.take(10)}…")
+
+            // 5. And the ticket has to actually upgrade the socket.
+            val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+            val client = HermesClient(http, scope)
+            try {
+                runBlocking {
+                    client.connect("${wsFor(base)}?ticket=$ticket", openingTimeoutMs = 30_000)
+                    waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+                }
+                println("socket       upgraded with the ticket")
+            } finally {
+                client.disconnect("password test finished")
+                scope.cancel()
+            }
+        } finally {
+            println("──────── hermes password run ────────")
+            http.connectionPool.evictAll()
+        }
+    }
+
     private companion object {
         /**
          * Resolves where the gateway is, or skips the test.
@@ -1018,18 +1160,107 @@ class HermesLiveTest {
          * what happens on a fresh checkout and on CI.
          */
         fun configuredGateway(): String {
-            val explicit = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() }
+            System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() }?.let { return it }
+
+            // Gated gateway (dashboard.public_url declared): a bare `?token=` is
+            // refused, so the only way in is a ticket minted from the sign-in
+            // cookie — the same walk the app's password mode makes.
+            val user = System.getenv("HERMES_TEST_USER")?.trim().orEmpty()
+            val pass = System.getenv("HERMES_TEST_PASSWORD").orEmpty()
+            if (user.isNotEmpty() && pass.isNotEmpty()) {
+                val base = configuredHttpBase()
+                assumeTrue(
+                    "Skipping: nothing listening at $base — start the gateway first.",
+                    gatewayReachable(base),
+                )
+                return ticketGateway(base, user, pass)
+            }
+
             val fromToken = System.getenv("HERMES_TEST_TOKEN")
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { "ws://127.0.0.1:19119/api/ws?token=$it" }
-            val url = explicit ?: fromToken
             assumeTrue(
-                "Skipping: set HERMES_TEST_WS (or HERMES_TEST_TOKEN) to run live tests.",
-                url != null,
+                "Skipping: set HERMES_TEST_WS, or HERMES_TEST_USER + HERMES_TEST_PASSWORD, to run live tests.",
+                fromToken != null,
             )
-            return url!!
+            return fromToken!!
         }
+
+        /**
+         * Signs in and returns a socket URL carrying a fresh single-use ticket.
+         *
+         * A failure here is a real failure, not a skip: the server answered, so
+         * bad credentials or a changed login contract must break the build
+         * rather than quietly disable the suite.
+         */
+        private fun ticketGateway(base: String, user: String, pass: String): String {
+            val http = OkHttpClient.Builder()
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .cookieJar(MemoryCookieJar())
+                .build()
+
+            fun post(url: String, body: JsonObject): Pair<Int, String> =
+                http.newCall(
+                    Request.Builder()
+                        .url(url)
+                        .post(body.toString().toRequestBody("application/json".toMediaType()))
+                        .build(),
+                ).execute().use { it.code to it.body?.string().orEmpty() }
+
+            val providers = http.newCall(Request.Builder().url("$base/api/auth/providers").get().build())
+                .execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw AssertionError("provider discovery failed: HTTP ${response.code}")
+                    }
+                    response.body?.string().orEmpty()
+                }
+            val provider = HermesJson.parseToJsonElement(providers).objOrNull()
+                ?.get("providers")?.arrOrNull()
+                ?.mapNotNull { it.objOrNull() }
+                ?.firstOrNull { it.str("supports_password")?.equals("true", ignoreCase = true) == true }
+                ?.str("name")
+                ?: throw AssertionError("$base advertises no password provider, so the live tests cannot sign in")
+
+            val (loginCode, loginBody) = post(
+                "$base/auth/password-login",
+                buildJsonObject {
+                    put("provider", JsonPrimitive(provider))
+                    put("username", JsonPrimitive(user))
+                    put("password", JsonPrimitive(pass))
+                    put("next", JsonPrimitive("/"))
+                },
+            )
+            if (loginCode !in 200..299) {
+                throw AssertionError("sign-in failed: HTTP $loginCode ${loginBody.take(200)}")
+            }
+
+            val (ticketCode, ticketBody) = post("$base/api/auth/ws-ticket", buildJsonObject {})
+            if (ticketCode !in 200..299) {
+                throw AssertionError("ticket minting failed: HTTP $ticketCode ${ticketBody.take(200)}")
+            }
+            val ticket = HermesJson.parseToJsonElement(ticketBody).objOrNull()?.str("ticket")
+                ?: throw AssertionError("sign-in succeeded but no ticket came back")
+
+            http.connectionPool.evictAll()
+            return "${wsFor(base)}?ticket=$ticket"
+        }
+
+        /**
+         * HTTP base for the gated sign-in flow, derived from the WebSocket URL
+         * unless `HERMES_TEST_HTTP` says otherwise.
+         */
+        fun configuredHttpBase(): String {
+            val explicit = System.getenv("HERMES_TEST_HTTP")?.trim()?.takeIf { it.isNotEmpty() }
+            if (explicit != null) return explicit.trimEnd('/')
+            val ws = System.getenv("HERMES_TEST_WS")?.trim()?.takeIf { it.isNotEmpty() }
+            assumeTrue("Skipping: set HERMES_TEST_HTTP (or HERMES_TEST_WS) for the password test.", ws != null)
+            return ws!!.replaceFirst("^ws", "http").substringBefore("/api/").trimEnd('/')
+        }
+
+        /** The socket URL for an HTTP base. */
+        fun wsFor(base: String): String = base.replaceFirst("^http", "ws").trimEnd('/') + "/api/ws"
 
         /** Cheap, deterministic: a model that is merely online can answer this. */
         const val PROMPT = "Reply with exactly the word: pong"
@@ -1047,3 +1278,13 @@ class HermesLiveTest {
         const val PROBE_TIMEOUT_MS = 2_000L
     }
 }
+
+private fun gatewayReachable(wsUrl: String): Boolean = runCatching {
+        val uri = URI(wsUrl)
+        val port = when {
+            uri.port != -1 -> uri.port
+            uri.scheme == "wss" -> 443
+            else -> 80
+        }
+        Socket().use { it.connect(InetSocketAddress(uri.host, port), 2_000) }
+    }.isSuccess
