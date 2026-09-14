@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -100,6 +101,13 @@ private fun NavigationPill(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    // A label that does not fit is worse than no label: at a large font scale
+    // (or on a narrow screen) the expanded pill runs off the edge, so the icon
+    // carries the destination on its own and `contentDescription` keeps it
+    // announced. Same rule the Material 3 Expressive reference uses.
+    val configuration = LocalConfiguration.current
+    val showLabel = configuration.fontScale <= 1.25f && configuration.screenWidthDp >= 400
+
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
@@ -141,7 +149,7 @@ private fun NavigationPill(
                 contentDescription = destination.label,
                 modifier = Modifier.size(if (pressed && !selected) 21.dp else 22.dp),
             )
-            AnimatedVisibility(visible = selected) {
+            AnimatedVisibility(visible = selected && showLabel) {
                 Row {
                     Spacer(Modifier.width(8.dp))
                     Text(
