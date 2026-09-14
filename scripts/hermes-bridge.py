@@ -20,15 +20,22 @@ which matters, since the app's whole transport is a WebSocket.
 
 Usage
 -----
-    scripts/hermes-bridge.py --listen 0.0.0.0:19121 --upstream 127.0.0.1:19120 \
-                             --rewrite-host 127.0.0.1:9119
+    scripts/hermes-bridge.py --upstream 127.0.0.1:19120 --rewrite-host 127.0.0.1:9119
 
 Point the app at `http://<bridge-host>:19121`. `--upstream` is wherever the
 gateway is actually reachable (a `ssh -L` tunnel, usually); `--rewrite-host` is
 the hostname the gateway will accept.
+
+It listens on 127.0.0.1 unless told otherwise, and says so loudly when it is
+not. The rewrite above is precisely the check `hermes serve` performs against
+DNS rebinding, so an exposed bridge hands the gateway to anyone who can reach
+the port. To let a device that cannot use an SSH tunnel through, forward this
+port rather than binding it wide: `adb reverse tcp:19121 tcp:19121` for a
+connected device or emulator, or a Tailscale `serve` for anything else.
 """
 
 import argparse
+import ipaddress
 import socket
 import sys
 import threading
@@ -114,15 +121,56 @@ def parse_address(value, default_port):
     return value, default_port
 
 
+def is_loopback(host):
+    """Whether a listen address stays on this machine."""
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
+def warn_if_exposed(host, port):
+    """Say plainly what an exposed bridge means, before anyone connects to it."""
+    print(
+        "\n"
+        "  ------------------------------------------------\n"
+        "  WARNING: this bridge is reachable from the network\n"
+        "  ------------------------------------------------\n"
+        f"  Listening on {host}:{port}, which is not loopback.\n"
+        "\n"
+        "  Every request through this bridge has its Host header replaced, and\n"
+        "  that header is the whole of the gateway's DNS-rebinding defence\n"
+        "  (GHSA-ppp5-vxwm-4cf7). Whoever can reach this port can therefore\n"
+        "  speak to the gateway as though they were the dashboard, with no\n"
+        "  credential of their own.\n"
+        "\n"
+        "  Prefer forwarding this port instead of binding it wide:\n"
+        "    adb reverse tcp:19121 tcp:19121   (device or emulator)\n"
+        "    ssh -N -L 19121:127.0.0.1:19121   (another machine)\n"
+        "  Bind wide only on a network you fully control.\n",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Host-rewriting TCP bridge for a loopback-only Hermes gateway")
-    parser.add_argument("--listen", default="0.0.0.0:19121", help="address to accept on (default 0.0.0.0:19121)")
+    parser.add_argument(
+        "--listen",
+        default="127.0.0.1:19121",
+        help="address to accept on (default 127.0.0.1:19121; a non-loopback address is warned about)",
+    )
     parser.add_argument("--upstream", default="127.0.0.1:19120", help="where the gateway is actually reachable")
     parser.add_argument("--rewrite-host", default="127.0.0.1:9119", help="Host header the gateway will accept")
     args = parser.parse_args()
 
     listen_host, listen_port = parse_address(args.listen, 19121)
     upstream_host, upstream_port = parse_address(args.upstream, 19120)
+
+    if not is_loopback(listen_host):
+        warn_if_exposed(listen_host, listen_port)
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
