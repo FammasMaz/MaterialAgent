@@ -11,6 +11,7 @@ import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.HistoryRow
 import com.materialagent.core.model.MediaKind
 import com.materialagent.core.model.SessionInfo
+import com.materialagent.core.model.Usage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -355,6 +356,7 @@ class ChatReducerTest {
         val running = SessionInfo(
             model = null, provider = null, reasoningEffort = null, serviceTier = null,
             fast = false, yolo = false, approvalMode = null, cwd = null, branch = null,
+            project = null, terminalBackend = null,
             title = null, storedSessionId = null, profileName = null, personality = null,
             running = true, turnStartedAt = null, version = null, usage = null,
             tools = emptyMap(), skills = emptyMap(), mcpServers = null,
@@ -698,6 +700,73 @@ class ChatReducerTest {
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun theOpeningSessionInfoUsageBlockDoesNotEraseARealOne() {
+        // Live, on one session: the open push carried input/output/reasoning/total/
+        // calls all 0 and no context fields, while the turn-complete push carried
+        // context_used 16529 of context_max 260000. Adopting the zeroed block drew
+        // "no context window reported" over a window that had just been measured.
+        val measured = Usage(
+            model = "gpt", input = 401, output = 5, reasoning = 0, total = 16534, calls = 1,
+            contextUsed = 16529, contextMax = 260_000, contextPercent = 6,
+            cacheHitPercent = 98, avgTps = 2.8, avgLatencyS = 1.8,
+            compressions = 0, activeSubagents = 0,
+        )
+        val state = ChatReducer.reduce(
+            ChatTranscript(usage = measured),
+            event(
+                GatewayEvent.SESSION_INFO,
+                p(
+                    "usage" to buildJsonObject {
+                        put("model", "gpt")
+                        put("input", 0)
+                        put("output", 0)
+                        put("reasoning", 0)
+                        put("total", 0)
+                        put("calls", 0)
+                    },
+                ),
+            ),
+            1.0,
+        )
+
+        assertEquals(16_529L, state.usage!!.contextUsed)
+        assertEquals(260_000L, state.usage!!.contextMax)
+    }
+
+    @Test
+    fun aSessionInfoUsageWithNumbersInItStillReplacesTheOldOne() {
+        // The guard must only reject an empty block; a newer measurement wins.
+        val earlier = Usage(
+            model = "gpt", input = 1, output = 1, reasoning = 0, total = 2, calls = 1,
+            contextUsed = 100, contextMax = 260_000, contextPercent = 1,
+            cacheHitPercent = null, avgTps = null, avgLatencyS = null,
+            compressions = 0, activeSubagents = 0,
+        )
+        val state = ChatReducer.reduce(
+            ChatTranscript(usage = earlier),
+            event(
+                GatewayEvent.SESSION_INFO,
+                p(
+                    "usage" to buildJsonObject {
+                        put("model", "gpt")
+                        put("input", 5_000)
+                        put("output", 20)
+                        put("total", 5_020)
+                        put("calls", 2)
+                        put("context_used", 5_000)
+                        put("context_max", 260_000)
+                    },
+                ),
+            ),
+            2.0,
+        )
+
+        assertEquals(5_000L, state.usage!!.contextUsed)
+        assertEquals(5_020L, state.usage!!.total)
+        assertEquals(2, state.usage!!.calls)
+    }
 
     private fun event(
         type: String,

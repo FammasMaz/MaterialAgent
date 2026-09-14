@@ -361,7 +361,7 @@ object ChatReducer {
                     title = info?.title?.takeIf { it.isNotBlank() } ?: state.title,
                     running = info?.running ?: state.running,
                     turnStartedAt = info?.turnStartedAt,
-                    usage = info?.usage ?: state.usage,
+                    usage = keepRicherUsage(state.usage, info?.usage),
                 )
             }
 
@@ -676,4 +676,32 @@ object ChatReducer {
         entries[index] = transform(entries[index])
         return state.copy(entries = entries)
     }
+
+    /**
+     * Picks the usage figure that actually says something.
+     *
+     * `session.info` is pushed when a session opens as well as after every turn,
+     * and the opening push carries a zeroed usage block: every counter 0, and both
+     * context fields simply absent (verified live — the same session reported
+     * `context_max: 260000` in the turn-complete push and no context fields at all
+     * in the open push). Adopting it verbatim would throw away a real measurement
+     * and replace it with zeros, which the conversation-info sheet would then draw
+     * as "no context window reported" a moment after drawing the window. Only a
+     * block carrying some number is allowed to overwrite one.
+     *
+     * Defensive rather than a demonstrated fix: on a fresh session the zeroed push
+     * arrives before any turn, so the downgrade this prevents needs a reconnect to
+     * re-push the open block, and that path was not reproduced against the live
+     * gateway.
+     */
+    private fun keepRicherUsage(current: Usage?, incoming: Usage?): Usage? = when {
+        incoming == null -> current
+        !incoming.isEmptyUsage() -> incoming
+        else -> current ?: incoming
+    }
+
+    /** No measurement at all: nothing counted, and no context window to divide by. */
+    private fun Usage.isEmptyUsage(): Boolean =
+        total == 0L && input == 0L && output == 0L && reasoning == 0L &&
+            contextUsed == 0L && contextMax == 0L && calls == 0
 }
