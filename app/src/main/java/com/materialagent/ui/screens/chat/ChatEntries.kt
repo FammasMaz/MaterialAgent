@@ -96,6 +96,7 @@ import com.materialagent.ui.components.StreamingText
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.PlainCodeBlock
 import com.materialagent.ui.components.pressScale
+import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.ExpressiveMotion
 import kotlinx.serialization.json.Json
 import java.util.Date
@@ -129,12 +130,7 @@ fun UserBubble(
         horizontalAlignment = Alignment.End,
     ) {
         Surface(
-            shape = RoundedCornerShape(
-                topStart = 24.dp,
-                topEnd = 24.dp,
-                bottomStart = 24.dp,
-                bottomEnd = 6.dp,
-            ),
+            shape = AgentShapes.bubbleTailEnd,
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.fillMaxWidth(0.88f),
@@ -244,7 +240,7 @@ fun AssistantBlock(
 
         if (entry.error != null) {
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.fillMaxWidth(),
@@ -311,7 +307,7 @@ fun ReasoningBlock(
 ) {
     val interaction = remember { MutableInteractionSource() }
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = AgentShapes.toolCard,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
@@ -391,7 +387,9 @@ fun ToolCard(
     }
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        // One radius for the whole tool card: the body inside it was 18dp, so a
+        // 20dp shell disagreed with its own contents.
+        shape = AgentShapes.toolCard,
         color = container,
         contentColor = content,
         modifier = modifier
@@ -535,7 +533,7 @@ fun TodosCard(
     )
 
     Surface(
-        shape = RoundedCornerShape(22.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier
             .fillMaxWidth()
@@ -628,7 +626,7 @@ fun InteractionCard(
     val answered = request.answer
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.large,
         color = accent,
         contentColor = onAccent,
         modifier = modifier
@@ -720,7 +718,7 @@ fun InteractionCard(
                                 }
                             },
                         ),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -775,7 +773,7 @@ fun InteractionCard(
                         label = { Text("Your answer") },
                         minLines = 1,
                         maxLines = 4,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -853,7 +851,7 @@ private fun ClarifyQuestions(
                             label = { Text("Your answer") },
                             minLines = 1,
                             maxLines = 4,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = MaterialTheme.shapes.medium,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Button(
