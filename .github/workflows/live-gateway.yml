@@ -1,0 +1,111 @@
+name: Live gateway
+
+# The live tests talk to a real `hermes serve` and need a token, so they run
+# here and not in the pull-request workflow. That separation is the point: a
+# `pull_request` job that carries a secret is a job any contributor can ask to
+# print it, and no amount of care in the test code fixes that. Secrets in a
+# workflow that pull requests cannot trigger are reachable only from a branch
+# somebody already controls.
+#
+# The gateway has to be reachable from a GitHub runner, so `HERMES_TEST_WS`
+# should be a public HTTPS address (the Tailscale Funnel or an `ssh -L`-style
+# exposure), not `127.0.0.1`. With the secret unset the tests skip themselves
+# rather than fail, and this workflow says so in its summary instead of
+# reporting a quiet green.
+#
+# Actions are pinned to commit SHAs rather than major tags: a tag is a moving
+# reference owned by whoever owns the action.
+on:
+  workflow_dispatch:
+    inputs:
+      require_gateway:
+        description: 'Fail when the gateway tests skipped instead of running'
+        type: boolean
+        default: false
+  schedule:
+    # Nightly, at an off-peak minute. The hour is arbitrary; nothing else in
+    # this repository depends on nightly output landing at a particular time.
+    - cron: '23 4 * * *'
+
+concurrency:
+  group: live-gateway-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    name: Talk to a live gateway
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install the platform and build tools
+        run: |
+          sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Live gateway tests
+        env:
+          # A full ws:// or wss:// URL, or the token/user+password pair below.
+          HERMES_TEST_WS: ${{ secrets.HERMES_TEST_WS }}
+          HERMES_TEST_TOKEN: ${{ secrets.HERMES_TEST_TOKEN }}
+          HERMES_TEST_USER: ${{ secrets.HERMES_TEST_USER }}
+          HERMES_TEST_PASSWORD: ${{ secrets.HERMES_TEST_PASSWORD }}
+        run: ./gradlew --no-daemon :app:testDebugUnitTest --tests '*HermesLiveTest*'
+
+      - name: Say what actually ran
+        if: always()
+        env:
+          REQUIRE_GATEWAY: ${{ inputs.require_gateway }}
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+          tests = skipped = failed = 0
+          for path in glob.glob('app/build/test-results/testDebugUnitTest/*.xml'):
+              root = ET.parse(path).getroot()
+              tests += int(root.get('tests', 0))
+              skipped += int(root.get('skipped', 0))
+              failed += int(root.get('failures', 0)) + int(root.get('errors', 0))
+          print(f'live tests: {tests} run, {skipped} skipped, {failed} failed')
+
+          configured = bool(os.environ.get('HERMES_TEST_WS') or os.environ.get('HERMES_TEST_TOKEN'))
+          required = os.environ.get('REQUIRE_GATEWAY') == 'true'
+
+          # A configured gateway that reached nothing is a warning, not a failure:
+          # the runner is a fresh machine each night and the tunnel may simply be
+          # down. Failing here would teach everyone to ignore the run.
+          if tests == 0:
+              print('::error::No live tests ran; the test filter matched no class.')
+          elif skipped == tests and not configured:
+              print('::notice::Every live test skipped: no gateway is configured for this '
+                    'repository. Set HERMES_TEST_WS (or HERMES_TEST_TOKEN) to run them.')
+          elif skipped == tests:
+              print('::warning::Every live test skipped even though a gateway is configured; '
+                    'this runner most likely cannot reach it.')
+
+          if failed or tests == 0 or (skipped == tests and required):
+              raise SystemExit(1)
+          PY
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: live-gateway-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore

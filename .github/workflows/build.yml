@@ -51,9 +51,6 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
 
       - name: Unit tests
-        env:
-          # Set to a URL to run the live gateway tests; unset they skip.
-          HERMES_TEST_WS: ${{ secrets.HERMES_TEST_WS }}
         run: ./gradlew --no-daemon testDebugUnitTest
 
       - name: Upload test reports
