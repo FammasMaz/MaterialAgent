@@ -27,6 +27,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
+import com.materialagent.ui.theme.AgentShapes
+
 /**
  * The expressive single-choice selector: one row of `ToggleButton`s whose shapes
  * are made to fit together, so a set of mutually exclusive options reads as a
@@ -57,7 +59,11 @@ fun ExpressiveToggleGroup(
     /** Container behind the fused buttons — the group's "tray". */
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     contentPadding: Dp = 4.dp,
-    cornerRadius: Dp = 28.dp,
+    // Defaulted to the tray token rather than a literal: M3E draws the shared outer
+    // corners of a connected group with a *full* (50%) corner, so the tray has to be
+    // at least half its own height or the two arcs stop being concentric. See
+    // `AgentShapes.toggleTray`.
+    cornerRadius: Dp = AgentShapes.toggleTray,
     /**
      * `true` splits the width evenly between the options — right for two or
      * three short labels (Light/Dark/System), where a ragged edge would look

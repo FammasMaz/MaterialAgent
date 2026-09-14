@@ -31,8 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -50,6 +49,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +58,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -103,10 +104,11 @@ import com.materialagent.ui.components.NoticeBanner
 import com.materialagent.ui.containerViewModel
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.alphaSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
 import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.theme.placementSpec
+import com.materialagent.ui.theme.playfulSpec
 import com.materialagent.ui.theme.LocalScrollHaptics
 import com.materialagent.ui.theme.LocalShowReasoning
 import com.materialagent.ui.theme.LocalShowToolCalls
@@ -122,7 +124,7 @@ import kotlinx.coroutines.launch
  * transcript itself rather than in a separate status page, because that is where
  * the user's attention already is.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ChatScreen(
     app: AgentViewModel,
@@ -291,7 +293,7 @@ fun ChatScreen(
                             item(key = entry.id) {
                                 Box(
                                     modifier = Modifier.animateItem(
-                                        fadeInSpec = ExpressiveMotion.Specs.alpha,
+                                        fadeInSpec = alphaSpec(),
                                         // A streaming row changes height on almost every
                                         // frame; animating its placement fights the
                                         // auto-scroll and reads as vertical jitter.
@@ -338,6 +340,7 @@ fun ChatScreen(
                             cue(HapticCue.SENT)
                             scope.launch { listState.animateScrollToItem(entries.size - 1) }
                         },
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(16.dp),
@@ -432,6 +435,7 @@ private fun TranscriptRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ChatTopBar(
     title: String,
@@ -449,7 +453,7 @@ private fun ChatTopBar(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp),
+        shape = MaterialTheme.shapes.extraLarge,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -458,7 +462,7 @@ private fun ChatTopBar(
                 .padding(start = 4.dp, end = 6.dp, top = 6.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -501,12 +505,12 @@ private fun ChatTopBar(
                 }
             }
 
-            IconButton(onClick = onPickModel) {
+            IconButton(onClick = onPickModel, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.Rounded.Tune, contentDescription = "Model and reasoning")
             }
 
             Box {
-                IconButton(onClick = { onMenuOpenChange(true) }) {
+                IconButton(onClick = { onMenuOpenChange(true) }, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Rounded.MoreVert, contentDescription = "More actions")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuOpenChange(false) }) {
@@ -575,6 +579,7 @@ private fun WorkingIndicator(elapsed: Double?) {
  * and morphs its shape to match. Steering is offered only when there is a running
  * turn and text in the box, which is exactly when it is useful and never otherwise.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun Composer(
     draft: String,
@@ -589,6 +594,10 @@ private fun Composer(
     val canSend = draft.isNotBlank() && !sending && enabled
     val steering = running && draft.isNotBlank()
     val sendOnEnter = LocalSendOnEnter.current
+
+    // Hoisted: `AnimatedContent`'s `transitionSpec` is not a composable lambda, so
+    // the scheme reading has to happen out here.
+    val morphSpec = playfulSpec<Float>()
 
     val targetShape = when {
         steering -> AgentShapes.composerActive
@@ -606,14 +615,15 @@ private fun Composer(
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(
-            topStart = shape + 10.dp,
-            topEnd = shape + 10.dp,
-            bottomStart = shape,
-            bottomEnd = shape,
+        // Top corners are a real token — M3E's `extraLargeIncreased` — rather than
+        // the `shape + 10.dp` fudge they used to be; only the bottom pair animates.
+        shape = MaterialTheme.shapes.extraLargeIncreased.copy(
+            bottomStart = CornerSize(shape),
+            bottomEnd = CornerSize(shape),
         ),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 2.dp,
+        // No `tonalElevation`: the container role already raises this surface, and
+        // stacking a 2dp tonal overlay on top of it double-counted the elevation.
     ) {
         Row(
             // The trailing control is a 48dp disc, and the composer's corners are cut
@@ -643,7 +653,7 @@ private fun Composer(
                 keyboardActions = KeyboardActions(
                     onSend = { if (canSend) onSend() },
                 ),
-                shape = RoundedCornerShape(18.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = Color.Transparent,
                     unfocusedContainerColor = Color.Transparent,
@@ -664,8 +674,8 @@ private fun Composer(
                     else -> ComposerAction.SEND
                 },
                 transitionSpec = {
-                    (scaleIn(animationSpec = ExpressiveMotion.Specs.playful) togetherWith
-                        scaleOut(animationSpec = ExpressiveMotion.Specs.playful))
+                    (scaleIn(animationSpec = morphSpec) togetherWith
+                        scaleOut(animationSpec = morphSpec))
                 },
                 label = "composerAction",
             ) { action ->
@@ -673,7 +683,11 @@ private fun Composer(
                     ComposerAction.SEND -> FilledIconButton(
                         onClick = onSend,
                         enabled = canSend,
-                        shape = CircleShape,
+                        // The default `IconButtonShapes` is round at rest (a 48dp disc)
+                        // and squares off to the medium radius while held — so the
+                        // send control keeps its shape and gains M3E's press morph
+                        // instead of pinning `CircleShape`.
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
@@ -684,7 +698,10 @@ private fun Composer(
 
                     ComposerAction.STEER -> Button(
                         onClick = onSteer,
-                        shape = RoundedCornerShape(16.dp),
+                        // A pill, not a 16dp rectangle: the three actions share this
+                        // slot and morph into one another, so they have to stay in
+                        // one shape family or the morph changes family mid-flight.
+                        shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) {
                         Icon(Icons.Rounded.AltRoute, contentDescription = null)
@@ -694,7 +711,7 @@ private fun Composer(
 
                     ComposerAction.STOP -> FilledTonalIconButton(
                         onClick = onStop,
-                        shape = RoundedCornerShape(16.dp),
+                        shapes = IconButtonDefaults.shapes(),
                         modifier = Modifier.size(48.dp),
                     ) {
                         Icon(Icons.Rounded.Stop, contentDescription = "Stop the agent")
@@ -786,12 +803,12 @@ private fun ModelPickerSheet(
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { query = "" }) {
+                        IconButton(onClick = { query = "" }, shapes = IconButtonDefaults.shapes()) {
                             Icon(Icons.Rounded.Close, contentDescription = "Clear search")
                         }
                     }
                 },
-                shape = RoundedCornerShape(50),
+                shape = AgentShapes.pill,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
@@ -860,7 +877,7 @@ private fun ModelPickerSheet(
                     val selected = currentReasoning == effort
                     Surface(
                         onClick = { onReasoning(effort) },
-                        shape = RoundedCornerShape(50),
+                        shape = AgentShapes.pill,
                         color = if (selected) {
                             MaterialTheme.colorScheme.secondaryContainer
                         } else {

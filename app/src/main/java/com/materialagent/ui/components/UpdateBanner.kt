@@ -1,7 +1,6 @@
 package com.materialagent.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -15,16 +14,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
@@ -40,13 +40,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import com.materialagent.data.MotionLevel
 import com.materialagent.data.update.AppUpdate
 import com.materialagent.data.update.UpdateState
 import com.materialagent.data.update.bannerVisible
-import com.materialagent.ui.theme.ExpressiveMotion
-import com.materialagent.ui.theme.LocalMotionLevel
-import com.materialagent.ui.theme.ReducedMotion
+import com.materialagent.ui.theme.placementSpec
+import com.materialagent.ui.theme.playfulSpec
 
 /**
  * The app's one update surface, shown above every screen.
@@ -67,12 +65,12 @@ fun UpdateBanner(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val reduced = LocalMotionLevel.current == MotionLevel.REDUCED
     // Entering is spatial, so it may overshoot; leaving must not, or a dismiss
-    // reads as a rendering glitch. Reduced motion settles in either direction.
-    val enter: SpringSpec<IntOffset> =
-        if (reduced) ReducedMotion.settle() else ExpressiveMotion.Spatial.playful()
-    val exit: SpringSpec<IntOffset> = ReducedMotion.settle()
+    // reads as a rendering glitch. Both read the theme's motion scheme, which is
+    // already `standard()` under reduced motion — so there is no separate branch
+    // to forget here.
+    val enter = playfulSpec<IntOffset>()
+    val exit = placementSpec<IntOffset>()
 
     AnimatedVisibility(
         visible = state.bannerVisible,
@@ -81,10 +79,11 @@ fun UpdateBanner(
         modifier = modifier.fillMaxWidth(),
     ) {
         Surface(
-            shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp),
+            shape = MaterialTheme.shapes.extraLarge,
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            shadowElevation = 6.dp,
+            // No drop shadow: M3E raises a surface with a container role, and a
+            // 6dp shadow on a bar pinned to the top edge read as Material 2.
         ) {
             // The container colour runs under the status bar; only the content
             // is pushed clear of it.
@@ -120,6 +119,7 @@ fun UpdateBanner(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AvailableContent(
     update: AppUpdate,
@@ -146,12 +146,13 @@ private fun AvailableContent(
                     "A newer build is ready to download"
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                // The role itself, de-emphasised by `bodySmall`: an 80%-alpha
+                // content role drops under 4.5:1 in dark and at large font scales.
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onDismiss) {
+        IconButton(onClick = onDismiss, shapes = IconButtonDefaults.shapes()) {
             Icon(Icons.Rounded.Close, contentDescription = "Dismiss")
         }
     }
@@ -162,7 +163,9 @@ private fun AvailableContent(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onSkipVersion) { Text("Skip this version") }
-        Button(onClick = onUpdate, shape = RoundedCornerShape(50)) { Text("Update") }
+        // `shapes`, not `shape`: M3E's button morphs its outline while pressed, and
+        // the single-shape overload pins a static outline instead.
+        Button(onClick = onUpdate, shapes = ButtonDefaults.shapes()) { Text("Update") }
     }
 }
 
@@ -184,7 +187,7 @@ private fun DownloadingContent(
                     "Version ${update.versionName}"
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
         TextButton(onClick = onCancelDownload) { Text("Cancel") }
@@ -194,6 +197,7 @@ private fun DownloadingContent(
     UpdateProgressBar(progress = progress)
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ReadyContent(
     update: AppUpdate,
@@ -212,12 +216,12 @@ private fun ReadyContent(
                     "Version ${update.versionName} downloaded"
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        IconButton(onClick = onDismiss) {
+        IconButton(onClick = onDismiss, shapes = IconButtonDefaults.shapes()) {
             Icon(Icons.Rounded.Close, contentDescription = "Later")
         }
     }
@@ -228,7 +232,7 @@ private fun ReadyContent(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TextButton(onClick = onDismiss) { Text("Later") }
-        Button(onClick = onInstall, shape = RoundedCornerShape(50)) { Text("Install") }
+        Button(onClick = onInstall, shapes = ButtonDefaults.shapes()) { Text("Install") }
     }
 }
 
@@ -244,7 +248,9 @@ fun UpdateProgressBar(
     progress: Float,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
-    trackColor: Color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+    // The track is a *container* role, not a faded content role: a 20%-alpha
+    // `onPrimaryContainer` tracked the text colour, which is not what a track is.
+    trackColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
 ) {
     val animated by animateFloatAsState(
         targetValue = progress.coerceAtLeast(0f),

@@ -2,6 +2,10 @@ package com.materialagent.ui.screens.capabilities
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,9 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Extension
@@ -30,8 +34,10 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -47,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -67,6 +74,8 @@ import com.materialagent.ui.containerViewModel
 import com.materialagent.ui.rememberCue
 import kotlinx.serialization.json.JsonObject
 import com.materialagent.ui.theme.LocalScrollHaptics
+import com.materialagent.ui.theme.alphaSpec
+import com.materialagent.ui.theme.contentSizeSpec
 
 /** What the agent on the other end can do — read-only, straight from the server. */
 private enum class CapabilityTab(val label: String) {
@@ -76,7 +85,7 @@ private enum class CapabilityTab(val label: String) {
     MCP("MCP"),
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CapabilitiesScreen(
     app: AgentViewModel,
@@ -132,6 +141,7 @@ fun CapabilitiesScreen(
                             cue(HapticCue.SENT)
                             viewModel.refresh()
                         },
+                        shapes = IconButtonDefaults.shapes(),
                         enabled = connected && !refreshing,
                     ) {
                         Icon(Icons.Rounded.Refresh, contentDescription = "Refresh capabilities")
@@ -240,7 +250,7 @@ fun CapabilitiesScreen(
                     skills.forEach { (category, names) ->
                         item(key = "skill-$category") {
                             Surface(
-                                shape = RoundedCornerShape(22.dp),
+                                shape = MaterialTheme.shapes.large,
                                 color = MaterialTheme.colorScheme.surfaceContainer,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
@@ -261,12 +271,7 @@ fun CapabilitiesScreen(
                                     }
                                     Spacer(Modifier.height(10.dp))
                                     names.forEach { name ->
-                                        Text(
-                                            text = "• $name",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(vertical = 2.dp),
-                                        )
+                                        BulletLine(text = name, style = MaterialTheme.typography.bodyMedium)
                                     }
                                 }
                             }
@@ -296,7 +301,7 @@ fun CapabilitiesScreen(
 @Composable
 private fun UsageCard(usage: com.materialagent.core.model.Usage) {
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -333,7 +338,7 @@ private fun ProviderCard(provider: ProviderInfo) {
     var expanded by remember { mutableStateOf(provider.isCurrent) }
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.large,
         color = if (provider.isCurrent) {
             MaterialTheme.colorScheme.primaryContainer
         } else {
@@ -341,7 +346,7 @@ private fun ProviderCard(provider: ProviderInfo) {
         },
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize()
+            .animateContentSize(animationSpec = contentSizeSpec())
             .clickable(role = Role.Button) { expanded = !expanded }
             .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
     ) {
@@ -388,15 +393,16 @@ private fun ProviderCard(provider: ProviderInfo) {
                 }
             }
 
-            AnimatedVisibility(visible = expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = fadeIn(animationSpec = alphaSpec()) +
+                    expandVertically(animationSpec = contentSizeSpec()),
+                exit = fadeOut(animationSpec = alphaSpec()) +
+                    shrinkVertically(animationSpec = contentSizeSpec()),
+            ) {
                 Column(modifier = Modifier.padding(top = 10.dp)) {
                     provider.models.forEach { model ->
-                        Text(
-                            text = "• $model",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 3.dp),
-                        )
+                        BulletLine(text = model, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -412,11 +418,11 @@ private fun ToolsetCard(
     var expanded by remember { mutableStateOf(false) }
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize(animationSpec = contentSizeSpec()),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -457,15 +463,16 @@ private fun ToolsetCard(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                AnimatedVisibility(visible = expanded) {
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = fadeIn(animationSpec = alphaSpec()) +
+                        expandVertically(animationSpec = contentSizeSpec()),
+                    exit = fadeOut(animationSpec = alphaSpec()) +
+                        shrinkVertically(animationSpec = contentSizeSpec()),
+                ) {
                     Column(modifier = Modifier.padding(top = 8.dp)) {
                         toolset.tools.forEach { tool ->
-                            Text(
-                                text = "• $tool",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 2.dp),
-                            )
+                            BulletLine(text = tool, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -491,7 +498,7 @@ private fun McpCard(server: JsonObject) {
         }
 
     Surface(
-        shape = RoundedCornerShape(22.dp),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -514,5 +521,36 @@ private fun McpCard(server: JsonObject) {
             }
             if (toolCount != null) MetaPill(text = "$toolCount tools")
         }
+    }
+}
+
+/**
+ * One bulleted line, as a marker column plus its text.
+ *
+ * The bullet used to be baked into the string (`"• $name"`), which meant a long
+ * model or tool name wrapped *under* the bullet instead of hanging past it. A
+ * marker column gives the wrapped lines a hanging indent, the same way the
+ * markdown renderer's list items already do.
+ */
+@Composable
+private fun BulletLine(text: String, style: TextStyle) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = "•",
+            style = style,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(min = 18.dp),
+        )
+        Text(
+            text = text,
+            style = style,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
     }
 }

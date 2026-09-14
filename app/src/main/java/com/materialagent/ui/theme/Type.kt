@@ -119,6 +119,26 @@ val MaterialAgentTypography = Typography(
     labelSmall = body(11, 15, 0.6, FontWeight.SemiBold),
 )
 
+/**
+ * Markdown heading styles, H1 → H3 (and everything below).
+ *
+ * Material's [Typography] has no display entry between `headlineSmall` (24sp) and
+ * `headlineMedium` (28sp), and `titleLarge` sits in [BodyFamily] — so a document's
+ * H1→H2 used to fall off the display voice onto the body voice mid-page, which
+ * reads as a rendering mistake rather than a hierarchy. These three keep every
+ * heading in [DisplayFamily] and step 24 → 21 → 18, the ladder the audit asked
+ * for without inventing a second type scale.
+ */
+private val MarkdownHeadingStyles = listOf(
+    display(24, 32, 0.0, FontWeight.SemiBold),
+    display(21, 28, 0.0, FontWeight.SemiBold),
+    display(18, 25, 0.0, FontWeight.SemiBold),
+)
+
+/** Heading style for a markdown `#` level; levels 3–6 share the smallest step. */
+fun markdownHeadingStyle(level: Int): TextStyle =
+    MarkdownHeadingStyles[(level - 1).coerceIn(0, MarkdownHeadingStyles.lastIndex)]
+
 /** Monospace voice for code blocks, tool arguments and diffs. */
 val CodeTextStyle = TextStyle(
     fontFamily = FontFamily.Monospace,

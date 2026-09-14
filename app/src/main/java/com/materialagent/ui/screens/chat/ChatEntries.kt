@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -50,6 +49,7 @@ import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -76,13 +76,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.materialagent.data.HapticCue
+import com.materialagent.data.MotionLevel
 import com.materialagent.data.chat.EntryKind
 import com.materialagent.data.chat.EntryStatus
 import com.materialagent.data.chat.InteractiveRequest
@@ -97,7 +97,9 @@ import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.PlainCodeBlock
 import com.materialagent.ui.components.pressScale
 import com.materialagent.ui.theme.AgentShapes
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.LocalMotionLevel
+import com.materialagent.ui.theme.alphaSpec
+import com.materialagent.ui.theme.contentSizeSpec
 import kotlinx.serialization.json.Json
 import java.util.Date
 import kotlinx.serialization.json.JsonObject
@@ -276,13 +278,21 @@ fun AssistantBlock(
  */
 @Composable
 private fun StreamingCaret(style: TextStyle = MaterialTheme.typography.bodyLarge) {
-    val transition = rememberInfiniteTransition(label = "caret")
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.15f,
-        animationSpec = infiniteRepeatable(tween(700), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse),
-        label = "caretAlpha",
-    )
+    // A caret blinking forever is the thing reduced motion is asking us not to
+    // show, so there it stays lit instead of pulsing.
+    val reduced = LocalMotionLevel.current == MotionLevel.REDUCED
+    val alpha = if (reduced) {
+        1f
+    } else {
+        val transition = rememberInfiniteTransition(label = "caret")
+        val blink by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.15f,
+            animationSpec = infiniteRepeatable(tween(700), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse),
+            label = "caretAlpha",
+        )
+        blink
+    }
     val height = with(LocalDensity.current) { style.lineHeight.toDp() }
     Box(
         modifier = Modifier
@@ -290,7 +300,7 @@ private fun StreamingCaret(style: TextStyle = MaterialTheme.typography.bodyLarge
             .height(height)
             .background(
                 MaterialTheme.colorScheme.primary.copy(alpha = alpha),
-                RoundedCornerShape(2.dp),
+                AgentShapes.rule,
             ),
     )
 }
@@ -306,12 +316,12 @@ fun ReasoningBlock(
 ) {
     val interaction = remember { MutableInteractionSource() }
     Surface(
-        shape = AgentShapes.toolCard,
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
             .fillMaxWidth()
-            .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize)
+            .animateContentSize(animationSpec = contentSizeSpec())
             .pressScale(interaction)
             .clickable(
                 interactionSource = interaction,
@@ -347,8 +357,10 @@ fun ReasoningBlock(
             }
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
+                enter = fadeIn(animationSpec = alphaSpec()) +
+                    expandVertically(animationSpec = contentSizeSpec()),
+                exit = fadeOut(animationSpec = alphaSpec()) +
+                    shrinkVertically(animationSpec = contentSizeSpec()),
             ) {
                 Text(
                     text = text,
@@ -386,15 +398,16 @@ fun ToolCard(
     }
 
     Surface(
-        // One radius for the whole tool card: the body inside it was 18dp, so a
-        // 20dp shell disagreed with its own contents.
-        shape = AgentShapes.toolCard,
+        // The medium token, because the code surfaces this card wraps (CodeBlock,
+        // PlainCodeBlock) are drawn with the medium shape: an 18dp shell disagreed
+        // with its own 16dp contents.
+        shape = MaterialTheme.shapes.medium,
         color = container,
         contentColor = content,
         modifier = modifier
             .fillMaxWidth()
             .rowPadding()
-            .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize),
+            .animateContentSize(animationSpec = contentSizeSpec()),
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(
@@ -451,8 +464,10 @@ fun ToolCard(
 
             AnimatedVisibility(
                 visible = expanded,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
+                enter = fadeIn(animationSpec = alphaSpec()) +
+                    expandVertically(animationSpec = contentSizeSpec()),
+                exit = fadeOut(animationSpec = alphaSpec()) +
+                    shrinkVertically(animationSpec = contentSizeSpec()),
             ) {
                 Column(
                     modifier = Modifier.padding(top = 10.dp),
@@ -503,7 +518,7 @@ fun NoteRow(
         horizontalArrangement = Arrangement.Center,
     ) {
         Surface(
-            shape = RoundedCornerShape(50),
+            shape = AgentShapes.pill,
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
             contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ) {
@@ -527,7 +542,7 @@ fun TodosCard(
     // spring would spring past the target and walk the bar backwards.
     val progress by animateFloatAsState(
         targetValue = if (todos.isEmpty()) 0f else done.toFloat() / todos.size,
-        animationSpec = ExpressiveMotion.Specs.alpha,
+        animationSpec = alphaSpec(),
         label = "todoProgress",
     )
 
@@ -601,6 +616,7 @@ fun TodosCard(
  * and all demand an explicit answer — the agent is stopped until one arrives, so
  * these never scroll past unnoticed.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun InteractionCard(
     request: InteractiveRequest,
@@ -631,7 +647,7 @@ fun InteractionCard(
         modifier = modifier
             .fillMaxWidth()
             .rowPadding()
-            .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize),
+            .animateContentSize(animationSpec = contentSizeSpec()),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -660,7 +676,11 @@ fun InteractionCard(
                         } else {
                             "Waiting"
                         },
-                        container = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        // A state layer off the card's own content colour, not a
+                        // translucent `surface`: `surface` over a coloured container
+                        // is whatever the two happen to composite to, and the pill's
+                        // contrast then depends on which card it landed on.
+                        container = onAccent.copy(alpha = 0.12f),
                         content = onAccent,
                     )
                 }
@@ -684,8 +704,8 @@ fun InteractionCard(
 
                 answered != null -> Text(
                     text = "You answered: $answered",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold,
+                    // `labelMedium` already carries 600; the scale has the weight.
+                    style = MaterialTheme.typography.labelMedium,
                 )
 
                 // The turn ended with this still unanswered, so it is no longer
@@ -693,7 +713,7 @@ fun InteractionCard(
                 request.expired -> Text(
                     text = "The turn ended before this was answered, so it is closed.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = onAccent.copy(alpha = 0.8f),
+                    color = onAccent,
                 )
 
                 request.kind == EntryKind.SUDO || request.kind == EntryKind.SECRET -> {
@@ -727,6 +747,9 @@ fun InteractionCard(
                                 onAnswer(typed)
                             },
                             enabled = typed.isNotBlank(),
+                            // `shapes`, not `shape`: M3E's button morphs its outline on
+                            // press; the single-shape overload pins a static outline.
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text("Send") }
                         TextButton(onClick = { onAnswer("cancel") }) { Text("Cancel") }
                     }
@@ -760,6 +783,7 @@ fun InteractionCard(
                                     onAnswer(choice)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
+                                shapes = ButtonDefaults.shapes(),
                             ) { Text(label) }
                         }
                     }
@@ -782,6 +806,7 @@ fun InteractionCard(
                                 onAnswer(typed)
                             },
                             enabled = typed.isNotBlank(),
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text("Send") }
                     }
                 }
@@ -797,6 +822,7 @@ fun InteractionCard(
  * partially answered batch is the normal middle state — the agent is still
  * waiting, and the person answering needs to see what they have already said.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ClarifyQuestions(
     request: InteractiveRequest,
@@ -815,16 +841,14 @@ private fun ClarifyQuestions(
                 if (request.questions.size > 1) {
                     Text(
                         text = question.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge,
                     )
                 }
 
                 when {
                     question.isAnswered -> Text(
                         text = "You answered: ${question.answer}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelMedium,
                     )
 
                     request.expired -> Unit
@@ -839,6 +863,7 @@ private fun ClarifyQuestions(
                                 onAnswerQuestion(question.id, choice)
                             },
                             modifier = Modifier.fillMaxWidth(),
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text(choice) }
                     }
 
@@ -859,6 +884,7 @@ private fun ClarifyQuestions(
                                 onAnswerQuestion(question.id, typed)
                             },
                             enabled = typed.isNotBlank(),
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text("Send") }
                     }
                 }

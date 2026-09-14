@@ -14,11 +14,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
@@ -35,6 +35,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.materialagent.ui.theme.alphaSpec
+import com.materialagent.ui.theme.AgentShapes
+import com.materialagent.ui.theme.contentSizeSpec
 
 /*
  * Small shared surfaces. Each of these exists because the same shape appears on
@@ -48,6 +51,7 @@ import androidx.compose.ui.unit.dp
  * Errors are always dismissible, never block the screen, and always say what
  * failed. A retry action is offered only when retrying can plausibly help.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ErrorBanner(
     message: String,
@@ -58,8 +62,8 @@ fun ErrorBanner(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .animateContentSize(),
-        shape = RoundedCornerShape(20.dp),
+            .animateContentSize(animationSpec = contentSizeSpec()),
+        shape = MaterialTheme.shapes.largeIncreased,
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
     ) {
@@ -83,6 +87,7 @@ fun ErrorBanner(
 }
 
 /** A softer informational banner, used for things that are not failures. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun NoticeBanner(
     message: String,
@@ -92,7 +97,7 @@ fun NoticeBanner(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.largeIncreased,
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
@@ -152,7 +157,7 @@ fun MetaPill(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(50),
+        shape = AgentShapes.pill,
         color = container,
         contentColor = content,
     ) {
@@ -181,6 +186,7 @@ fun MetaPill(
  * The shared empty state. Every list gets one, and it always offers the action
  * that would fill the list — an empty screen with no way forward is a dead end.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun EmptyState(
     title: String,
@@ -213,7 +219,9 @@ fun EmptyState(
         )
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(4.dp))
-            Button(onClick = onAction) { Text(actionLabel) }
+            // `shapes`, not `shape`: the single-shape overload pins a static
+            // outline, which is what made the app's buttons Material 2 on touch.
+            Button(onClick = onAction, shapes = ButtonDefaults.shapes()) { Text(actionLabel) }
         }
         if (secondaryActionLabel != null && onSecondaryAction != null) {
             TextButton(onClick = onSecondaryAction) { Text(secondaryActionLabel) }
@@ -257,7 +265,11 @@ fun GroupDivider(modifier: Modifier = Modifier) {
 /** Reveals content with a soft fade instead of a hard pop. */
 @Composable
 fun SoftVisibility(visible: Boolean, content: @Composable () -> Unit) {
-    AnimatedVisibility(visible = visible, enter = fadeIn(), exit = fadeOut()) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = alphaSpec()),
+        exit = fadeOut(animationSpec = alphaSpec()),
+    ) {
         Box { content() }
     }
 }

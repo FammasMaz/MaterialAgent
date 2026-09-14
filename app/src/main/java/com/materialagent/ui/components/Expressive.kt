@@ -86,13 +86,23 @@ fun AgentMark(
     val faded = Brush.linearGradient(
         listOf(tint.copy(alpha = 0.82f), blendTo.copy(alpha = 0.82f)),
     )
-    val transition = rememberInfiniteTransition(label = "markSheen")
-    val sweep by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Restart),
-        label = "sweep",
-    )
+    val reduced = LocalMotionLevel.current == MotionLevel.REDUCED
+    // The travelling highlight is ambient ("the agent is alive"), not feedback, so
+    // reduced motion drops it entirely. It reverses rather than restarting, because
+    // a highlight that teleports from the right edge back to the left is a jump cut.
+    val showSheen = sheen && !reduced
+    val sweep = if (showSheen) {
+        val transition = rememberInfiniteTransition(label = "markSheen")
+        val value by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2800, easing = LinearEasing), RepeatMode.Reverse),
+            label = "sweep",
+        )
+        value
+    } else {
+        0f
+    }
     // A highlight tinted for whichever surface it sits on.
     val sheenColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.35f)
 
@@ -122,7 +132,7 @@ fun AgentMark(
                 drawPath(serpentPath(45f, 49f, 61f, 55f, 49f, 63f, 54f, 73f), brush, style = Stroke(5.5f, cap = StrokeCap.Round))
                 drawPath(serpentPath(63f, 49f, 47f, 55f, 59f, 63f, 54f, 73f), brush, style = Stroke(5.5f, cap = StrokeCap.Round))
 
-                if (sheen) {
+                if (showSheen) {
                     // A travelling highlight sells "the agent is alive" without
                     // adding a spinner next to the brand. Derived from the scheme
                     // rather than hardcoded white, because a white highlight is
@@ -229,6 +239,9 @@ fun AgentOrb(
     }
 
     val steps = shapes.size
+    // Ambient, like the brand mark's sheen and the live dot: the orb is a mood, not
+    // a response to input, so it has no `MotionScheme` duration of its own. 1400ms a
+    // shape is a beat long enough to read each silhouette before the next arrives.
     val stepMillis = 1400
     val holdFraction = 0.36f
     val transition = rememberInfiniteTransition(label = "orb")
@@ -351,19 +364,31 @@ fun LivePulse(
     color: Color = MaterialTheme.colorScheme.primary,
     size: Dp = 8.dp,
 ) {
-    val transition = rememberInfiniteTransition(label = "livePulse")
-    val scale by transition.animateFloat(
-        initialValue = 0.75f,
-        targetValue = 1.25f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "pulse",
-    )
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.45f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "pulseAlpha",
-    )
+    // Ambient, not feedback: a "live" dot has no state to express and no
+    // `MotionScheme` duration of its own, so this is one of the few places a fixed
+    // duration is right — M3's `extraLong4` (1000ms). The easing is symmetric, so
+    // the reversal at the end of each leg has no velocity corner; the linear ramp
+    // it replaces snapped visibly at both turns.
+    val pulse = tween<Float>(durationMillis = 1000, easing = FastOutSlowInEasing)
+    val reduced = LocalMotionLevel.current == MotionLevel.REDUCED
+    val (scale, alpha) = if (reduced) {
+        1f to 1f
+    } else {
+        val transition = rememberInfiniteTransition(label = "livePulse")
+        val pulseScale by transition.animateFloat(
+            initialValue = 0.75f,
+            targetValue = 1.25f,
+            animationSpec = infiniteRepeatable(pulse, RepeatMode.Reverse),
+            label = "pulse",
+        )
+        val pulseAlpha by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.45f,
+            animationSpec = infiniteRepeatable(pulse, RepeatMode.Reverse),
+            label = "pulseAlpha",
+        )
+        pulseScale to pulseAlpha
+    }
     Canvas(modifier = modifier.size(size * 1.6f)) {
         drawCircle(color = color.copy(alpha = alpha * 0.35f), radius = this.size.minDimension / 2f)
         drawCircle(color = color.copy(alpha = alpha), radius = this.size.minDimension / 2f * scale * 0.55f)

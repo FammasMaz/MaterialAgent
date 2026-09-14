@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -38,7 +37,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.materialagent.data.HapticCue
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.alphaSpec
+import com.materialagent.ui.theme.AgentShapes
+import com.materialagent.ui.theme.colorSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
 import com.materialagent.ui.theme.placementSpec
 
@@ -147,7 +148,7 @@ private fun NavigationPill(
         } else {
             Color.Transparent
         },
-        animationSpec = ExpressiveMotion.Specs.color,
+        animationSpec = colorSpec(),
         label = "pillContainer",
     )
     val content by animateColorAsState(
@@ -156,14 +157,14 @@ private fun NavigationPill(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
-        animationSpec = ExpressiveMotion.Specs.color,
+        animationSpec = colorSpec(),
         label = "pillContent",
     )
 
     Surface(
         onClick = onClick,
         modifier = Modifier.pressScale(interaction),
-        shape = RoundedCornerShape(50),
+        shape = AgentShapes.pill,
         color = container,
         contentColor = content,
         interactionSource = interaction,
@@ -203,7 +204,7 @@ private fun NavigationPill(
             )
             val labelAlpha by animateFloatAsState(
                 targetValue = if (selected && showLabel) 1f else 0f,
-                animationSpec = ExpressiveMotion.Specs.alpha,
+                animationSpec = alphaSpec(),
                 label = "navLabelAlpha",
             )
 

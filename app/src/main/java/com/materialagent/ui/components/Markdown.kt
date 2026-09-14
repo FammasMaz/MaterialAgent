@@ -19,12 +19,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,8 +51,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.CodeTextStyle
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.contentSizeSpec
+import com.materialagent.ui.theme.markdownHeadingStyle
 
 /*
  * A deliberately small Markdown renderer.
@@ -99,11 +102,10 @@ fun MarkdownText(
 
                 is Block.Heading -> Text(
                     text = block.spans,
-                    style = when (block.level) {
-                        1 -> MaterialTheme.typography.headlineSmall
-                        2 -> MaterialTheme.typography.titleLarge
-                        else -> MaterialTheme.typography.titleMedium
-                    },
+                    // One family for every heading level: mixing the display voice
+                    // (H1) with the body voice (H2) made a 1→2 transition change
+                    // typeface mid-page.
+                    style = markdownHeadingStyle(block.level),
                     color = color,
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -144,8 +146,11 @@ fun MarkdownText(
                             .width(3.dp)
                             .fillMaxHeight()
                             .background(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                RoundedCornerShape(2.dp),
+                                // A rule, not a faded accent: `outlineVariant` is the
+                                // role for both this bar and the horizontal rule below,
+                                // so the two read as the same device.
+                                MaterialTheme.colorScheme.outlineVariant,
+                                AgentShapes.rule,
                             ),
                     )
                     Spacer(Modifier.width(10.dp))
@@ -170,6 +175,7 @@ fun MarkdownText(
 }
 
 /** Monospace block with a copy affordance that confirms itself in place. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun CodeBlock(
     language: String?,
@@ -204,6 +210,7 @@ fun CodeBlock(
                         manager.setPrimaryClip(ClipData.newPlainText("code", code))
                         copied = true
                     },
+                    shapes = IconButtonDefaults.shapes(),
                 ) {
                     Icon(
                         imageVector = if (copied) Icons.Rounded.Done else Icons.Rounded.ContentCopy,
@@ -223,7 +230,7 @@ fun CodeBlock(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
                     .padding(end = 10.dp)
-                    .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize),
+                    .animateContentSize(animationSpec = contentSizeSpec()),
             )
         }
     }

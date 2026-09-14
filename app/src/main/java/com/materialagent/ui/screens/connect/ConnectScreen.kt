@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -31,9 +30,11 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -69,7 +70,9 @@ import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.rememberCue
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.alphaSpec
+import com.materialagent.ui.theme.AgentShapes
+import com.materialagent.ui.theme.colorSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
 import java.util.UUID
 
@@ -111,7 +114,7 @@ fun ConnectScreen(
     )
     val heroAlpha by animateFloatAsState(
         targetValue = 1f - 0.55f * collapse,
-        animationSpec = ExpressiveMotion.Specs.alpha,
+        animationSpec = alphaSpec(),
         label = "heroAlpha",
     )
 
@@ -181,7 +184,7 @@ fun ConnectScreen(
                                 Color.Transparent,
                             ),
                         ),
-                        shape = RoundedCornerShape(50),
+                        shape = AgentShapes.pill,
                     ),
             )
             AgentMark(size = markSize, sheen = true, gradient = true, sweepAmount = 1f - collapse)
@@ -216,7 +219,7 @@ fun ConnectScreen(
         }
 
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainer,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -253,7 +256,7 @@ fun ConnectScreen(
                         autoCorrectEnabled = false,
                         imeAction = ImeAction.Next,
                     ),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -265,7 +268,7 @@ fun ConnectScreen(
                     singleLine = true,
                     leadingIcon = { Icon(Icons.Rounded.Verified, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -295,7 +298,7 @@ fun ConnectScreen(
                             imeAction = ImeAction.Done,
                         ),
                         keyboardActions = KeyboardActions(onDone = { if (canSubmit) submit() }),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
@@ -311,7 +314,7 @@ fun ConnectScreen(
                             autoCorrectEnabled = false,
                             imeAction = ImeAction.Next,
                         ),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
@@ -328,7 +331,7 @@ fun ConnectScreen(
                             imeAction = ImeAction.Done,
                         ),
                         keyboardActions = KeyboardActions(onDone = { if (canSubmit) submit() }),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -336,7 +339,7 @@ fun ConnectScreen(
                 Button(
                     onClick = { submit() },
                     enabled = canSubmit,
-                    shape = RoundedCornerShape(50),
+                    shapes = ButtonDefaults.shapes(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp),
@@ -384,6 +387,7 @@ fun ConnectScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SavedServerRow(
     profile: ServerProfile,
@@ -397,12 +401,12 @@ private fun SavedServerRow(
         } else {
             MaterialTheme.colorScheme.surfaceContainer
         },
-        animationSpec = ExpressiveMotion.Specs.color,
+        animationSpec = colorSpec(),
         label = "savedContainer",
     )
     Surface(
         onClick = onConnect,
-        shape = RoundedCornerShape(22.dp),
+        shape = MaterialTheme.shapes.large,
         color = container,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -429,7 +433,7 @@ private fun SavedServerRow(
                     if (active) MetaPill(text = "Connected", icon = Icons.Rounded.Verified)
                 }
             }
-            IconButton(onClick = onForget) {
+            IconButton(onClick = onForget, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.Rounded.Delete, contentDescription = "Forget ${profile.name}")
             }
         }

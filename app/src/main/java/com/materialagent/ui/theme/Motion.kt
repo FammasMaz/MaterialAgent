@@ -1,129 +1,94 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.materialagent.ui.theme
 
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.SpringSpec
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
-import com.materialagent.data.MotionLevel
-
-/**
- * The motion system.
- *
- * Material 3 Expressive's central motion idea is the split between *spatial*
- * and *effects* springs:
- *
- *  * **Spatial** (position, size, rotation, corner radius, scale) is allowed to
- *    overshoot — `dampingRatio < 1`. This is the bounce you feel when a sheet
- *    settles or a tool card expands.
- *  * **Effects** (colour, opacity, elevation, blur) must never overshoot —
- *    `dampingRatio = 1.0`. A colour that bounces reads as a rendering bug.
- *
- * Every animation in the app draws from this object, so the feel stays coherent
- * and [MotionLevel.REDUCED] can flatten it in one place.
- */
-object ExpressiveMotion {
-
-    /** Springs for anything that moves through space. Bouncy by design. */
-    object Spatial {
-        private const val BOUNCE = 0.62f
-
-        /** Default for most transitions. */
-        fun <T> default(): SpringSpec<T> = spring(dampingRatio = BOUNCE, stiffness = 380f)
-
-        /** Corner-radius morphs; stiffer so shape changes land quickly. */
-        fun <T> shape(): SpringSpec<T> = spring(dampingRatio = BOUNCE, stiffness = 520f)
-
-        /** Press/release scale on buttons and cards. */
-        fun <T> press(): SpringSpec<T> = spring(dampingRatio = BOUNCE, stiffness = 700f)
-
-        /** Screen-level container transforms. */
-        fun <T> container(): SpringSpec<T> = spring(dampingRatio = BOUNCE, stiffness = 340f)
-
-        /** Hero moments — the FAB, the streaming avatar, the banner shapes. */
-        fun <T> playful(): SpringSpec<T> = spring(dampingRatio = 0.5f, stiffness = 420f)
-
-        /** Height/size changes on growing message bubbles. */
-        fun <T> size(): SpringSpec<T> = spring(dampingRatio = 0.72f, stiffness = 300f)
-    }
-
-    /** Springs for colour, alpha, elevation. Critically damped — never bounce. */
-    object Effects {
-        private const val NO_BOUNCE = Spring.DampingRatioNoBouncy
-
-        fun <T> color(): SpringSpec<T> = spring(dampingRatio = NO_BOUNCE, stiffness = 320f)
-
-        fun <T> alpha(): SpringSpec<T> = spring(dampingRatio = NO_BOUNCE, stiffness = 300f)
-
-        fun <T> elevation(): SpringSpec<T> = spring(dampingRatio = NO_BOUNCE, stiffness = 380f)
-    }
-
-    /** Type-safe presets, so call sites don't have to spell a generic. */
-    object Specs {
-        val scale: SpringSpec<Float> = Spatial.press()
-        val alpha: SpringSpec<Float> = Effects.alpha()
-        val bubbleSize: SpringSpec<Float> = Spatial.size()
-
-        /** For `animateContentSize`, which animates an [IntSize], not a Float. */
-        val contentSize: SpringSpec<androidx.compose.ui.unit.IntSize> = Spatial.size()
-        val playful: SpringSpec<Float> = Spatial.playful()
-        val cornerRadius: SpringSpec<Dp> = Spatial.shape()
-        val elevation: SpringSpec<Dp> = Effects.elevation()
-        val color: SpringSpec<androidx.compose.ui.graphics.Color> = Effects.color()
-    }
-
-    /** Press scale and travel distances used across the app. */
-    object Values {
-        const val PRESSED_SCALE = 0.96f
-        const val SELECTED_SCALE = 1.02f
-        const val DEFAULT_SCALE = 1f
-    }
-}
-
-/**
- * Flat, non-bouncy specs for users who asked for less motion. Deliberately
- * still *animated* — reduced motion is not "no feedback", it's "no surprise".
- */
-object ReducedMotion {
-    fun <T> settle(): SpringSpec<T> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 700f)
-    fun <T> fade(): SpringSpec<T> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 600f)
-}
-
-/** Picks the spec set for the user's motion preference. */
-@Suppress("UNCHECKED_CAST")
-fun <T> motionFor(level: MotionLevel, spatial: Boolean): SpringSpec<T> =
-    if (level == MotionLevel.REDUCED) {
-        ReducedMotion.settle()
-    } else {
-        if (spatial) ExpressiveMotion.Spatial.default() else ExpressiveMotion.Effects.alpha()
-    }
 
 /*
- * Preference-aware specs for call sites.
+ * The motion system.
  *
- * `motionFor` alone was not enough: call sites hardcoded
- * `ExpressiveMotion.Specs.*`, so choosing "Reduced" in settings flattened
- * nothing except the orb, while every other animation kept overshooting. These
- * read [LocalMotionLevel] straight off the theme instead, so one setting governs
- * the whole app.
+ * Material 3 Expressive's central motion idea is the split between *spatial* and
+ * *effects* specs:
  *
- * Only *spatial* travel is routed here. Effect specs (colour, alpha) are already
- * critically damped by construction, so they cannot overshoot and do not need to
- * change with the preference.
+ *  * **Spatial** (position, size, rotation, corner radius, scale) may overshoot —
+ *    that bounce is what a settling sheet or an expanding tool card feels like.
+ *  * **Effects** (colour, alpha, elevation) must never overshoot — a colour that
+ *    bounces reads as a rendering bug.
+ *
+ * The theme installs a [MotionScheme] — `expressive()`, or `standard()` when the
+ * user asks for less motion — and everything below *reads that scheme* instead of
+ * spelling its own spring constants. Two things fall out of that. The app's own
+ * animations and Material's built-in components finally run one motion system
+ * rather than two: before this, the scheme was installed and never read, so a
+ * switch and the pill beside it moved on different curves. And reduced motion
+ * needs no branching at all — `MotionScheme.standard()` is critically damped, so
+ * reading the scheme *is* the reduced-motion path.
+ *
+ * Call the helpers from a composable. They are deliberately not a plain object:
+ * the scheme only differs from `expressive()` inside the theme's composition.
  */
 
-/** Spec for anything that moves through space, honouring the motion setting. */
+/** Press/release scale and selectable-icon size. Spatial, fast — the snappiest step. */
 @Composable
-fun scaleSpec(): SpringSpec<Float> = motionFor(LocalMotionLevel.current, spatial = true)
+fun scaleSpec(): FiniteAnimationSpec<Float> = MaterialTheme.motionScheme.fastSpatialSpec()
 
+/** `animateContentSize` (an [IntSize]) — a spatial change, so it may settle with a bounce. */
 @Composable
-fun contentSizeSpec(): SpringSpec<IntSize> = motionFor(LocalMotionLevel.current, spatial = true)
+fun contentSizeSpec(): FiniteAnimationSpec<IntSize> = MaterialTheme.motionScheme.defaultSpatialSpec()
 
+/** Corner-radius morphs, on the shared `animateDpAsState` path. */
 @Composable
-fun cornerRadiusSpec(): SpringSpec<Dp> = motionFor(LocalMotionLevel.current, spatial = true)
+fun cornerRadiusSpec(): FiniteAnimationSpec<Dp> = MaterialTheme.motionScheme.defaultSpatialSpec()
 
-/** Position changes (`Modifier.animateItem`, offsets) — spatial, so preference-aware. */
+/** Position changes (`Modifier.animateItem`, offsets, reveals). */
 @Composable
-fun <T> placementSpec(): SpringSpec<T> = motionFor(LocalMotionLevel.current, spatial = true)
+fun <T> placementSpec(): FiniteAnimationSpec<T> = MaterialTheme.motionScheme.defaultSpatialSpec()
+
+/**
+ * Hero moments — the composer action morphing send→steer→stop. Spatial and slow,
+ * so the bounce is the expressive one rather than a hand-picked damping ratio.
+ */
+@Composable
+fun <T> playfulSpec(): FiniteAnimationSpec<T> = MaterialTheme.motionScheme.slowSpatialSpec()
+
+/**
+ * Alpha/opacity. Effects, so this must never overshoot; under reduced motion the
+ * standard scheme is already non-bouncy, which is all an effect can ask for.
+ */
+@Composable
+fun alphaSpec(): FiniteAnimationSpec<Float> = MaterialTheme.motionScheme.defaultEffectsSpec()
+
+/** Colour transitions (`animateColorAsState` on a container or content role). */
+@Composable
+fun colorSpec(): FiniteAnimationSpec<Color> = MaterialTheme.motionScheme.defaultEffectsSpec()
+
+/**
+ * Specs for the two screens another agent still owns, which reference
+ * `ExpressiveMotion.Specs.*` and cannot be edited here.
+ *
+ * These are built from `MotionScheme.expressive()` and so match the theme exactly
+ * in the default case, but — being non-composable — they cannot follow the
+ * reduced-motion branch. `SessionsScreen` and `SettingsScreen` therefore still
+ * animate with expressive specs under reduced motion; moving them onto
+ * [alphaSpec]/[colorSpec] is the follow-up that closes that gap.
+ */
+object ExpressiveMotion {
+    private val scheme = MotionScheme.expressive()
+
+    object Specs {
+        val alpha: FiniteAnimationSpec<Float> = scheme.fastEffectsSpec()
+        val color: FiniteAnimationSpec<Color> = scheme.fastEffectsSpec()
+    }
+
+    /** Press scale used across the app. */
+    object Values {
+        const val PRESSED_SCALE = 0.96f
+    }
+}
