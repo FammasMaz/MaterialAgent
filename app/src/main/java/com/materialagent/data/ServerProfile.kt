@@ -33,7 +33,10 @@ enum class HapticLevel { OFF, SUBTLE, STANDARD, STRONG }
 
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    // The app has its own identity; dynamic colour is an opt-in, not the default.
+    // Dynamic colour is the default: it is what a fresh install wears, and what the
+    // tray offers first. A device that cannot honour it falls back to Hermes (see
+    // `effectivePalette`), and the tray hides the choice rather than offering one
+    // that does nothing.
     val palette: PaletteMode = PaletteMode.DYNAMIC,
     val motionLevel: MotionLevel = MotionLevel.FULL,
     val hapticLevel: HapticLevel = HapticLevel.STANDARD,

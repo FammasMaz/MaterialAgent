@@ -128,24 +128,14 @@ fun SettingsScreen(
                     title = "Theme",
                     subtitle = "Follow the system, or pin light or dark",
                 ) {
-                    ChoiceRow(
-                        options = listOf(
-                            "System" to (settings.themeMode == ThemeMode.SYSTEM),
-                            "Light" to (settings.themeMode == ThemeMode.LIGHT),
-                            "Dark" to (settings.themeMode == ThemeMode.DARK),
-                        ),
+                    ExpressiveToggleGroup(
+                        options = ThemeMode.entries.map { it.label() },
+                        selectedIndex = ThemeMode.entries.indexOf(settings.themeMode),
                         onSelect = { index ->
                             cue(HapticCue.SENT)
-                            app.update {
-                                it.copy(
-                                    themeMode = when (index) {
-                                        1 -> ThemeMode.LIGHT
-                                        2 -> ThemeMode.DARK
-                                        else -> ThemeMode.SYSTEM
-                                    },
-                                )
-                            }
+                            app.update { it.copy(themeMode = ThemeMode.entries[index]) }
                         },
+                        fillWidth = true,
                     )
                 }
 
@@ -172,7 +162,7 @@ fun SettingsScreen(
                     },
                 ) {
                     ExpressiveToggleGroup(
-                        options = paletteChoices.map(::paletteLabel),
+                        options = paletteChoices.map { it.label() },
                         selectedIndex = paletteChoices
                             .indexOf(activePalette)
                             .coerceAtLeast(0),
@@ -191,23 +181,14 @@ fun SettingsScreen(
                     title = "Motion",
                     subtitle = "Expressive springs, or calmer transitions",
                 ) {
-                    ChoiceRow(
-                        options = listOf(
-                            "Full" to (settings.motionLevel == MotionLevel.FULL),
-                            "Reduced" to (settings.motionLevel == MotionLevel.REDUCED),
-                        ),
+                    ExpressiveToggleGroup(
+                        options = MotionLevel.entries.map { it.label() },
+                        selectedIndex = MotionLevel.entries.indexOf(settings.motionLevel),
                         onSelect = { index ->
                             cue(HapticCue.SENT)
-                            app.update {
-                                it.copy(
-                                    motionLevel = if (index == 1) {
-                                        MotionLevel.REDUCED
-                                    } else {
-                                        MotionLevel.FULL
-                                    },
-                                )
-                            }
+                            app.update { it.copy(motionLevel = MotionLevel.entries[index]) }
                         },
+                        fillWidth = true,
                     )
                 }
 
@@ -218,18 +199,16 @@ fun SettingsScreen(
                     title = "Haptics",
                     subtitle = "How much the app touches back",
                 ) {
-                    ChoiceRow(
-                        options = listOf(
-                            "Off" to (settings.hapticLevel == HapticLevel.OFF),
-                            "Subtle" to (settings.hapticLevel == HapticLevel.SUBTLE),
-                            "Normal" to (settings.hapticLevel == HapticLevel.STANDARD),
-                            "Strong" to (settings.hapticLevel == HapticLevel.STRONG),
-                        ),
+                    ExpressiveToggleGroup(
+                        options = HapticLevel.entries.map { it.label() },
+                        selectedIndex = HapticLevel.entries.indexOf(settings.hapticLevel),
                         onSelect = { index ->
-                            val level = HapticLevel.entries.getOrElse(index) { HapticLevel.STANDARD }
+                            // The cue fires before the write, so turning haptics off
+                            // still acknowledges the tap that turned them off.
                             cue(HapticCue.TOGGLE)
-                            app.update { it.copy(hapticLevel = level) }
+                            app.update { it.copy(hapticLevel = HapticLevel.entries[index]) }
                         },
+                        fillWidth = true,
                     )
                 }
             }
@@ -626,25 +605,35 @@ private fun SwitchRow(
     }
 }
 
-/** A compact expressive selector used for every enumerated preference. */
-@Composable
-private fun ChoiceRow(
-    options: List<Pair<String, Boolean>>,
-    onSelect: (Int) -> Unit,
-) {
-    ExpressiveToggleGroup(
-        options = options.map { it.first },
-        selectedIndex = options.indexOfFirst { it.second }.coerceAtLeast(0),
-        onSelect = onSelect,
-        fillWidth = true,
-    )
-}
-
 private fun Modifier.clickableRowCompat(onClick: () -> Unit): Modifier =
     this.then(Modifier.clickable(onClick = onClick))
 
-/** What each palette calls itself in the tray. */
-private fun paletteLabel(mode: PaletteMode): String = when (mode) {
+/**
+ * What each preference calls its own value.
+ *
+ * One of these per enum, read from the enum itself, so a label and the value it
+ * indexes can never drift apart: the tray renders `entries.map { it.label() }`
+ * and writes back `entries[index]`, which only lines up if both agree on order.
+ */
+private fun ThemeMode.label(): String = when (this) {
+    ThemeMode.SYSTEM -> "System"
+    ThemeMode.LIGHT -> "Light"
+    ThemeMode.DARK -> "Dark"
+}
+
+private fun MotionLevel.label(): String = when (this) {
+    MotionLevel.FULL -> "Full"
+    MotionLevel.REDUCED -> "Reduced"
+}
+
+private fun HapticLevel.label(): String = when (this) {
+    HapticLevel.OFF -> "Off"
+    HapticLevel.SUBTLE -> "Subtle"
+    HapticLevel.STANDARD -> "Normal"
+    HapticLevel.STRONG -> "Strong"
+}
+
+private fun PaletteMode.label(): String = when (this) {
     PaletteMode.DYNAMIC -> "Dynamic"
     PaletteMode.HERMES -> "Hermes"
     PaletteMode.HERMES_SKIN -> "Server"
