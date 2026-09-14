@@ -289,15 +289,32 @@ object ChatReducer {
                 stamp = stamp,
             )
 
-            GatewayEvent.CLARIFY_REQUEST -> state.appendInteraction(
-                kind = EntryKind.CLARIFY,
-                requestId = event.requestId ?: "clarify-${stamp}",
-                title = payload.strAny("question", "prompt").orEmpty().ifBlank { "The agent has a question" },
-                detail = "",
-                choices = payload.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
-                multiSelect = payload.bool("multi_select") ?: false,
-                stamp = stamp,
-            )
+            GatewayEvent.CLARIFY_REQUEST -> {
+                // `questions[]` is the real shape — the older flat
+                // `question`/`choices` keys are still read as a fallback so a
+                // single-question variant keeps working.
+                val questions = clarifyQuestions(payload)
+                state.appendInteraction(
+                    kind = EntryKind.CLARIFY,
+                    requestId = event.requestId ?: "clarify-${stamp}",
+                    // One question reads best as the heading itself. Several
+                    // would repeat the first one under a heading that already
+                    // showed it, so the heading goes generic and each question
+                    // keeps its own line below.
+                    title = if (questions.size > 1) {
+                        "The agent has ${questions.size} questions"
+                    } else {
+                        questions.firstOrNull()?.text?.ifBlank { null }
+                            ?: payload.strAny("question", "prompt").orEmpty()
+                                .ifBlank { "The agent has a question" }
+                    },
+                    detail = "",
+                    choices = payload.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
+                    multiSelect = payload.bool("multi_select") ?: false,
+                    questions = questions,
+                    stamp = stamp,
+                )
+            }
 
             GatewayEvent.SUDO_REQUEST -> state.appendInteraction(
                 kind = EntryKind.SUDO,
@@ -451,10 +468,12 @@ object ChatReducer {
             restored = restored.appendInteraction(
                 kind = EntryKind.CLARIFY,
                 requestId = clarify.str("request_id") ?: "clarify-replayed",
-                title = clarify.strAny("question", "prompt").orEmpty().ifBlank { "The agent has a question" },
+                title = clarifyQuestions(clarify).firstOrNull()?.text?.ifBlank { null }
+                    ?: clarify.strAny("question", "prompt").orEmpty().ifBlank { "The agent has a question" },
                 detail = "",
                 choices = clarify.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
                 multiSelect = clarify.bool("multi_select") ?: false,
+                questions = clarifyQuestions(clarify),
                 stamp = clarify.double("timestamp") ?: 0.0,
             )
         }
@@ -468,6 +487,54 @@ object ChatReducer {
             historyError = null,
             running = info?.running ?: false,
         )
+    }
+
+    /**
+     * Records one question of a batch as answered.
+     *
+     * The card stays up until the last one, because the agent is still blocked —
+     * the gateway only releases the tool once every `qid` is accounted for.
+     */
+    fun markQuestionAnswered(
+        state: ChatTranscript,
+        requestId: String,
+        questionId: String,
+        answer: String,
+    ): ChatTranscript = updateEntry(state, requestId) { entry ->
+        val request = entry.interactive ?: return@updateEntry entry
+        val questions = request.questions.map { question ->
+            if (question.id == questionId) question.copy(answer = answer) else question
+        }
+        // A single-question batch reads better as "You answered: X" than as a
+        // one-row list, so keep `answer` in step with the only question.
+        val only = if (questions.size == 1) questions.first().answer else request.answer
+        entry.copy(interactive = request.copy(questions = questions, answer = only))
+    }
+
+    /**
+     * Closes a request the server no longer holds.
+     *
+     * `clarify.respond` answers `{"status":"expired"}` when the request is gone —
+     * already resolved, or timed out server-side. Treating that as success is how
+     * a card ends up claiming an answer the agent never received.
+     */
+    fun markInteractionExpired(state: ChatTranscript, requestId: String): ChatTranscript =
+        updateEntry(state, requestId) { entry ->
+            entry.copy(interactive = entry.interactive?.copy(expired = true))
+        }
+
+    /** Reads the gateway's `questions[]`, tolerating the older flat shape. */
+    private fun clarifyQuestions(source: JsonObject?): List<ClarifyQuestion> {
+        val raw = source.arr("questions") ?: return emptyList()
+        return raw.mapIndexedNotNull { index, element ->
+            val obj = element as? JsonObject ?: return@mapIndexedNotNull null
+            ClarifyQuestion(
+                id = obj.str("qid").orEmpty().ifBlank { "q$index" },
+                text = obj.strAny("question", "prompt").orEmpty(),
+                choices = obj.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
+                multiSelect = obj.bool("multi_select") ?: false,
+            )
+        }
     }
 
     fun markInteractionAnswered(
@@ -495,6 +562,7 @@ object ChatReducer {
         detail: String,
         choices: List<String> = emptyList(),
         multiSelect: Boolean = false,
+        questions: List<ClarifyQuestion> = emptyList(),
         stamp: Double,
     ): ChatTranscript {
         if (entries.any { it.interactive?.requestId == requestId }) return this
@@ -509,6 +577,7 @@ object ChatReducer {
                 detail = detail,
                 choices = choices,
                 multiSelect = multiSelect,
+                questions = questions,
             ),
         )
         return copy(entries = sealStreaming(this).entries + entry)

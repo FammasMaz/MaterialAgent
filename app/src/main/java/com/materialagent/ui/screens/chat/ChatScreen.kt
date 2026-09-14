@@ -78,6 +78,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -142,6 +143,7 @@ fun ChatScreen(
     LaunchedEffect(storedId) { viewModel.openIfNeeded(storedId, title = null) }
 
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     var menuOpen by remember { mutableStateOf(false) }
     var modelSheetOpen by remember { mutableStateOf(false) }
 
@@ -307,6 +309,11 @@ fun ChatScreen(
                                                 viewModel.answer(request, value)
                                             }
                                         },
+                                        onAnswerQuestion = { questionId, value ->
+                                            entry.interactive?.let { request ->
+                                                viewModel.answer(request, value, questionId)
+                                            }
+                                        },
                                         onCue = cue,
                                     )
                                 }
@@ -341,7 +348,13 @@ fun ChatScreen(
                 sending = sending,
                 enabled = connection !is ConnectionStatus.Failed,
                 onDraftChange = viewModel::updateDraft,
-                onSend = viewModel::send,
+                onSend = {
+                    viewModel.send()
+                    // Answering and reading both want the transcript, and a
+                    // blocking card can appear immediately after a send — the
+                    // keyboard would sit on top of it.
+                    focusManager.clearFocus()
+                },
                 onSteer = viewModel::steer,
                 onStop = {
                     cue(HapticCue.INTERRUPTED)
@@ -381,6 +394,7 @@ private fun TranscriptRow(
     showReasoning: Boolean,
     showTools: Boolean,
     onAnswer: (String) -> Unit,
+    onAnswerQuestion: (questionId: String, value: String) -> Unit,
     onCue: (HapticCue) -> Unit,
 ) {
     when (entry.kind) {
@@ -403,7 +417,12 @@ private fun TranscriptRow(
 
         EntryKind.APPROVAL, EntryKind.CLARIFY, EntryKind.SUDO, EntryKind.SECRET ->
             entry.interactive?.let { request ->
-                InteractionCard(request = request, onAnswer = onAnswer, onCue = onCue)
+                InteractionCard(
+                    request = request,
+                    onAnswer = onAnswer,
+                    onCue = onCue,
+                    onAnswerQuestion = onAnswerQuestion,
+                )
             }
     }
 }

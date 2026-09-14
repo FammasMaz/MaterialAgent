@@ -829,6 +829,182 @@ class HermesLiveTest {
         if (unexpected == actual) throw AssertionError("$message (both were '$actual')")
     }
 
+    /**
+     * Pins the clarify batch contract, which a single-answer client gets wrong in
+     * a way that looks like success.
+     *
+     * The gateway sends `questions[]` and resolves the request per question: the
+     * `qid` goes back as `question_id`, the reply reports how many are
+     * `remaining`, and only the last answer releases the tool. An answer sent
+     * without a `question_id` takes a different internal path and still answers
+     * `{"status":"ok"}` — while the agent receives nothing, which is how a
+     * two-question clarify reported "the clarify tool returned no answer" with the
+     * typed text sitting in the card.
+     *
+     * The test asserts the protocol rather than the app's UI: it drives the same
+     * calls the app makes through [InteractionParams], so a future change to the
+     * parameter shape fails here.
+     */
+    @Test(timeout = 420_000)
+    fun clarifyAnswersAreMatchedToTheirQuestion() {
+        val wsUrl = configuredGateway()
+        assumeTrue(
+            "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
+            gatewayReachable(wsUrl),
+        )
+
+        val http = OkHttpClient.Builder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(http, scope)
+        val events = CopyOnWriteArrayList<GatewayEvent>()
+        val collectorScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        collectorScope.launch { client.events.collect { events.add(it) } }
+        val transcript = StringBuilder()
+        fun note(line: String) {
+            transcript.appendLine(line)
+        }
+
+        var runtime: String? = null
+        var stored: String? = null
+        try {
+            runBlocking {
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+
+                val created = client.request(
+                    "session.create",
+                    buildJsonObject {
+                        put("source", JsonPrimitive("mobile"))
+                        put("title", JsonPrimitive("MaterialAgent clarify test"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                runtime = created.str("session_id").orEmpty()
+                stored = created.str("stored_session_id").orEmpty()
+
+                client.request(
+                    "prompt.submit",
+                    buildJsonObject {
+                        put("session_id", JsonPrimitive(runtime))
+                        put(
+                            "text",
+                            JsonPrimitive(
+                                "Use the clarify tool to ask me exactly two questions with " +
+                                    "choices: which database, and which language. Then reply " +
+                                    "with just the two options I chose, one per line, verbatim.",
+                            ),
+                        )
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("submitted  a two-question clarify prompt")
+
+                waitUntil(APPROVAL_WAIT_MS) {
+                    events.any { it.type == GatewayEvent.CLARIFY_REQUEST && it.sessionId == runtime }
+                }
+                val request = events.firstOrNull {
+                    it.type == GatewayEvent.CLARIFY_REQUEST && it.sessionId == runtime
+                }
+                assertNotNull(
+                    "the agent must raise a clarify for this prompt; event types seen: " +
+                        events.map { it.type }.distinct(),
+                    request,
+                )
+
+                val requestId = request!!.requestId.orEmpty()
+                val questions = request.payload?.arr("questions")
+                    ?.mapNotNull { it.objOrNull() }
+                    .orEmpty()
+                val qids = questions.mapNotNull { it.str("qid") }
+                note("clarify    request_id=$requestId qids=$qids")
+                assertTrue(
+                    "a clarify carries questions[] with qids, saw ${questions.size} questions",
+                    questions.size >= 2 && qids.size == questions.size,
+                )
+
+                // The shape the app sends: one respond per question, carrying its qid.
+                // A question that offers choices has to be answered with one of
+                // them. A free-text answer for a choice question is accepted by
+                // the gateway and then read by the agent as an unrecognised value.
+                val picks = questions.mapIndexed { index, question ->
+                    val offered = question.arr("choices")?.firstOrNull()?.strOrNull()
+                    assertNotNull(
+                        "question $index must offer choices for this test; got ${question.toString().take(200)}",
+                        offered,
+                    )
+                    // Exactly what a card button sends: the decorated label.
+                    offered!!
+                }
+                val expected = picks.map { it.replace(" (Recommended)", "").trim() }
+                note("picks      $picks")
+
+                qids.forEachIndexed { index, qid ->
+                    val answer = picks[index]
+                    val replied = client.request(
+                        "clarify.respond",
+                        InteractionParams.clarify(
+                            requestId = requestId,
+                            questionId = qid,
+                            answer = answer,
+                        ),
+                        timeoutMs = REQUEST_TIMEOUT_MS,
+                    )
+                    // `remaining` is absent on the single-answer path and an empty
+                    // list once a batch is complete. Those mean different things —
+                    // absent means the answer never joined a batch — so a missing
+                    // list is a failure rather than something `orEmpty()` hides.
+                    val remaining = replied.arr("remaining")
+                    assertNotNull(
+                        "clarify.respond must report how many questions remain; " +
+                            "a reply without `remaining` means the answer did not join " +
+                            "the batch: $replied",
+                        remaining,
+                    )
+                    val outstanding = remaining!!.mapNotNull { it.strOrNull() }
+                    note("responded  $qid answer=$answer -> remaining=$outstanding")
+                    assertEquals(
+                        "each answer must be matched to its own question: answering $qid " +
+                            "left $outstanding outstanding, expected ${qids.size - index - 1}",
+                        qids.size - index - 1,
+                        outstanding.size,
+                    )
+                }
+
+                // The batch is only released by the final answer, so the tool has
+                // to come back with every answer the app sent, in order.
+                waitUntil(TURN_TIMEOUT_MS) {
+                    events.any {
+                        it.type == GatewayEvent.MESSAGE_COMPLETE && it.sessionId == runtime
+                    }
+                }
+                val completion = events.firstOrNull {
+                    it.type == GatewayEvent.MESSAGE_COMPLETE && it.sessionId == runtime
+                }
+                val text = completion?.payload?.strAny("text", "content").orEmpty()
+                note("answer     ${text.take(240).replace('\n', ' ')}")
+                val missing = expected.filterNot { text.contains(it) }
+                assertTrue(
+                    "the agent must receive every option it was sent, with the " +
+                        "recommendation decoration stripped; missing $missing from: " +
+                        text.take(240),
+                    missing.isEmpty(),
+                )
+            }
+        } finally {
+            runBlocking { runCatching { cleanup(client, runtime, stored, ::note) } }
+            client.disconnect()
+            collectorScope.cancel()
+            scope.cancel()
+            println("──────── hermes clarify run ────────")
+            print(transcript)
+            println("─────────────────────────────────────")
+        }
+    }
+
     private companion object {
         /**
          * Resolves where the gateway is, or skips the test.

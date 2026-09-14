@@ -2,6 +2,7 @@ package com.materialagent.data
 
 import com.materialagent.core.HermesRpcException
 import com.materialagent.core.InteractionParams
+import com.materialagent.core.str
 import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.data.chat.ChatReducer
@@ -280,8 +281,57 @@ class ChatController(
     suspend fun approve(requestId: String, choice: String): Result<Unit> =
         respond("approval.respond", requestId, choice) { InteractionParams.approval(it, requestId, choice) }
 
-    suspend fun answerClarification(requestId: String, answer: String): Result<Unit> =
-        respond("clarify.respond", requestId, answer) { InteractionParams.clarify(requestId, answer) }
+    /**
+     * Answers one question of a clarify request.
+     *
+     * [questionId] is the question's `qid`. It is not optional in practice: the
+     * gateway resolves a batch per question and only releases the agent once the
+     * last one is answered, while an answer without a `question_id` is accepted
+     * with `status: ok` and delivered to nobody.
+     *
+     * The reply is inspected rather than assumed. `status: "expired"` means the
+     * request is no longer outstanding — answered elsewhere, or past the
+     * server-side deadline — and the card has to stop claiming otherwise.
+     */
+    suspend fun answerClarification(
+        requestId: String,
+        questionId: String,
+        answer: String,
+    ): Result<Unit> {
+        if (_transcript.value.sessionId == null) {
+            return Result.failure(IllegalStateException("No open session to answer in"))
+        }
+        return withLiveSession { connection.send("clarify.respond", InteractionParams.clarify(
+                requestId = requestId,
+                questionId = questionId,
+                answer = answer,
+            )) }
+            .fold(
+                onSuccess = { reply ->
+                    val status = reply.str("status")
+                    _transcript.value = when {
+                        status == "expired" -> ChatReducer.markInteractionExpired(_transcript.value, requestId)
+                        questionId.isNotEmpty() -> ChatReducer.markQuestionAnswered(
+                            _transcript.value,
+                            requestId,
+                            questionId,
+                            answer,
+                        )
+
+                        else -> ChatReducer.markInteractionAnswered(_transcript.value, requestId, answer)
+                    }
+                    Result.success(Unit)
+                },
+                onFailure = { error ->
+                    _transcript.value = ChatReducer.failInteraction(
+                        _transcript.value,
+                        requestId,
+                        error.message ?: "Could not send the answer",
+                    )
+                    Result.failure(error)
+                },
+            )
+    }
 
     suspend fun answerSudo(requestId: String, password: String): Result<Unit> =
         respond("sudo.respond", requestId, password) { InteractionParams.sudo(requestId, password) }

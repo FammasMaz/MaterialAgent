@@ -103,7 +103,7 @@ must be dropped.
 | `todo.updated` * | `{todos}` |
 | `status.update` | `{kind, text}` |
 | `approval.request` | `{request_id, command/description, allow_permanent, smart_denied?}` |
-| `clarify.request` | `{request_id, question, choices?, multi_select?, questions?}` |
+| `clarify.request` | `{request_id, questions[]}` for a batch (`qid`,`question`,`choices`,`multi_select` per entry); the older single-question `{question, choices?, multi_select?}` shape has no `questions[]` |
 | `sudo.request` | `{request_id, …}` |
 | `secret.request` | `{request_id, env_var, prompt}` |
 | `turn.error` | error text |
@@ -174,7 +174,7 @@ hands back the same id (pinned by `HermesLiveTest.runtimeIdSurvivesASocketDrop`)
 `prompt.background` · `prompt.btw`.
 
 **Interactions** `approval.pending` · `approval.respond{session_id,request_id,choice}` ·
-`clarify.respond{request_id,answer}` · `sudo.respond{request_id,password}` ·
+`clarify.respond{request_id,question_id,answer}` · `sudo.respond{request_id,password}` ·
 `secret.respond{request_id,value}`.
 
 Each method reads a **different** key and *falls back to a default when it is missing* — a call
@@ -182,6 +182,23 @@ with the wrong key succeeds and means the wrong thing. `approval.respond` defaul
 `clarify.respond` to an empty answer. Only `approval.respond` resolves its session explicitly;
 the others find it through the gateway's pending-request registry. Send exactly these shapes
 (verified live, see `HermesLiveTest.approvalResponseUsesTheServersParameterNames`).
+
+A `clarify.request` is a **batch**: it carries `questions[]` (one entry for a single question),
+each question has a `qid`, and `clarify.respond` resolves them one at a time by echoing that `qid`
+as `question_id`. Every reply reports `remaining` — the qids still unanswered — and the tool is
+only released when it is empty. Two failure modes matter:
+
+- **An answer without `question_id` is accepted and ignored.** It returns `{"status":"ok"}` with no
+  `remaining`, the question stays unanswered, and the tool eventually sees nothing at all. The
+  card then claims an answer the agent never received.
+- **`{"status":"expired"}`** means the request is no longer outstanding (answered elsewhere, or
+  past the server-side deadline), so the card has to close rather than stay live.
+
+A question that offers `choices` has to be answered with one of them: the tool strips a
+`(Recommended)` decoration before the model sees the value, so the wire carries the decorated
+label and the agent receives the bare one. Verified live end to end by
+`HermesLiveTest.clarifyAnswersAreMatchedToTheirQuestion`, which watches `remaining` go `[q1]` →
+`[]` and then checks the agent's finished text contains both options.
 
 `approval.request` carries the allowed answers in `choices`, and `always` is **absent** when the
 policy forbids a permanent allow:

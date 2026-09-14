@@ -438,6 +438,156 @@ class ChatReducerTest {
         assertTrue("so it needs no attention", finished.pendingInteractions.isEmpty())
     }
 
+    // ── clarify batches ─────────────────────────────────────────────────────
+
+    /**
+     * The gateway sends `questions[]`, and the question text lives inside it.
+     * Reading a `question` key off the payload top level finds nothing, which is
+     * why the card used to show a generic heading with no question in it.
+     */
+    @Test
+    fun clarifyQuestionsAreReadFromTheNestedShape() {
+        val state = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                type = GatewayEvent.CLARIFY_REQUEST,
+                payload = p(
+                    "request_id" to "req-1",
+                    "questions" to buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("qid", "q0")
+                                put("question", "Which database?")
+                                put(
+                                    "choices",
+                                    buildJsonArray {
+                                        add(JsonPrimitive("PostgreSQL"))
+                                        add(JsonPrimitive("SQLite"))
+                                    },
+                                )
+                                put("multi_select", false)
+                            },
+                        )
+                        add(
+                            buildJsonObject {
+                                put("qid", "q1")
+                                put("question", "Which language?")
+                            },
+                        )
+                    },
+                ),
+            ),
+            now = 1.0,
+        )
+
+        val request = state.entries.single().interactive
+        assertNotNull(request)
+        // Several questions get a count as the heading; repeating the first one
+        // under a heading that already showed it was the old duplication.
+        assertEquals("The agent has 2 questions", request!!.title)
+        assertEquals(2, request.questions.size)
+        assertEquals(listOf("q0", "q1"), request.questions.map { it.id })
+        assertEquals(listOf("PostgreSQL", "SQLite"), request.questions[0].choices)
+        assertEquals("Which language?", request.questions[1].text)
+    }
+
+    /**
+     * A batch stays open until the last question is answered, because that is
+     * what the gateway waits for — the agent is still blocked in between.
+     */
+    @Test
+    fun aBatchStaysPendingUntilEveryQuestionIsAnswered() {
+        val opened = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                type = GatewayEvent.CLARIFY_REQUEST,
+                payload = p(
+                    "request_id" to "req-2",
+                    "questions" to buildJsonArray {
+                        add(buildJsonObject { put("qid", "q0"); put("question", "A?") })
+                        add(buildJsonObject { put("qid", "q1"); put("question", "B?") })
+                    },
+                ),
+            ),
+            now = 1.0,
+        )
+
+        val afterFirst = ChatReducer.markQuestionAnswered(opened, "req-2", "q0", "first")
+        val request = afterFirst.entries.single().interactive!!
+        assertEquals("first", request.questions[0].answer)
+        assertTrue("the batch is still waiting on q1", request.isPending)
+        assertEquals(1, request.unansweredCount)
+
+        val afterSecond = ChatReducer.markQuestionAnswered(afterFirst, "req-2", "q1", "second")
+        val settled = afterSecond.entries.single().interactive!!
+        assertFalse("the last answer releases it", settled.isPending)
+        assertEquals(0, settled.unansweredCount)
+    }
+
+    /** One question reads best as the heading itself. */
+    @Test
+    fun aSingleQuestionUsesTheQuestionAsTheHeading() {
+        val state = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                type = GatewayEvent.CLARIFY_REQUEST,
+                payload = p(
+                    "request_id" to "req-5",
+                    "questions" to buildJsonArray {
+                        add(buildJsonObject { put("qid", "q0"); put("question", "Only one?") })
+                    },
+                ),
+            ),
+            now = 1.0,
+        )
+        assertEquals("Only one?", state.entries.single().interactive?.title)
+    }
+
+    /** A one-question batch still reads as a plain answer in the card. */
+    @Test
+    fun aSingleQuestionBatchMirrorsItsAnswerOntoTheRequest() {
+        val opened = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                type = GatewayEvent.CLARIFY_REQUEST,
+                payload = p(
+                    "request_id" to "req-3",
+                    "questions" to buildJsonArray {
+                        add(buildJsonObject { put("qid", "q0"); put("question", "Only one?") })
+                    },
+                ),
+            ),
+            now = 1.0,
+        )
+        val answered = ChatReducer.markQuestionAnswered(opened, "req-3", "q0", "yes")
+        assertEquals("yes", answered.entries.single().interactive?.answer)
+    }
+
+    /**
+     * `status: "expired"` means the request is no longer outstanding. The card has
+     * to close, not claim an answer the agent never received.
+     */
+    @Test
+    fun anExpiredClarifyClosesTheCard() {
+        val opened = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                type = GatewayEvent.CLARIFY_REQUEST,
+                payload = p(
+                    "request_id" to "req-4",
+                    "questions" to buildJsonArray {
+                        add(buildJsonObject { put("qid", "q0"); put("question", "Too late?") })
+                    },
+                ),
+            ),
+            now = 1.0,
+        )
+        val expired = ChatReducer.markInteractionExpired(opened, "req-4")
+        val request = expired.entries.single().interactive!!
+        assertTrue(request.expired)
+        assertFalse(request.isPending)
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private fun event(

@@ -35,6 +35,29 @@ data class TodoItem(
     val status: String,
 )
 
+/**
+ * One question inside a clarify request.
+ *
+ * The gateway always sends `questions[]`, even for a single question, and it
+ * answers them **per question**: `clarify.respond` wants the `qid` echoed back
+ * as `question_id`, and the request only resolves once every question has been
+ * answered — the last answer is what releases the agent.
+ *
+ * Answering without a `question_id` takes a different path inside the gateway
+ * that still replies `{"status":"ok"}` while the tool itself gets nothing, which
+ * is exactly how a two-question clarify came back saying "the clarify tool
+ * returned no answer" with the typed text sitting in the card looking answered.
+ */
+data class ClarifyQuestion(
+    val id: String,
+    val text: String,
+    val choices: List<String> = emptyList(),
+    val multiSelect: Boolean = false,
+    val answer: String? = null,
+) {
+    val isAnswered: Boolean get() = !answer.isNullOrBlank()
+}
+
 /** A blocking question the agent asked and is waiting on. */
 data class InteractiveRequest(
     val requestId: String,
@@ -51,6 +74,11 @@ data class InteractiveRequest(
     /** Set to the chosen answer once the user responds. */
     val answer: String? = null,
     /**
+     * For a `clarify.request` in its batch form: every question separately,
+     * each answered on its own. Empty for the single-answer kinds.
+     */
+    val questions: List<ClarifyQuestion> = emptyList(),
+    /**
      * The request stopped being answerable before anyone answered it — the
      * gateway fails an unanswered approval closed on a timeout, and the turn
      * ends without it. An unanswered card would otherwise sit there claiming to
@@ -58,7 +86,18 @@ data class InteractiveRequest(
      */
     val expired: Boolean = false,
 ) {
-    val isPending: Boolean get() = answer == null && !expired
+    /**
+     * Still answerable. A batch stays pending until every question has an answer,
+     * and only the last one releases the agent.
+     */
+    val isPending: Boolean
+        get() = !expired && when {
+            questions.isNotEmpty() -> questions.any { !it.isAnswered }
+            else -> answer == null
+        }
+
+    /** How many questions of a batch are still unanswered. */
+    val unansweredCount: Int get() = questions.count { !it.isAnswered }
 }
 
 /** One row in the chat transcript. */

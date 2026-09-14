@@ -100,13 +100,19 @@ class ChatViewModel(
         }
     }
 
-    fun answer(request: InteractiveRequest, value: String) {
+    /**
+     * Answers a blocking interaction.
+     *
+     * [questionId] carries the `qid` for a clarify batch — without it the gateway
+     * accepts the answer and passes nothing to the agent.
+     */
+    fun answer(request: InteractiveRequest, value: String, questionId: String = "") {
         viewModelScope.launch {
             val result = when (request.kind) {
                 com.materialagent.data.chat.EntryKind.APPROVAL ->
                     container.chat.approve(request.requestId, value)
                 com.materialagent.data.chat.EntryKind.CLARIFY ->
-                    container.chat.answerClarification(request.requestId, value)
+                    container.chat.answerClarification(request.requestId, questionId, value)
                 com.materialagent.data.chat.EntryKind.SUDO ->
                     container.chat.answerSudo(request.requestId, value)
                 com.materialagent.data.chat.EntryKind.SECRET ->

@@ -134,6 +134,31 @@ is still unanswered. The whole path is verified rather than assumed — pressing
 the emulator made `rm -rf /tmp/probe-dir` actually run (the directory was gone when checked on the
 server), and the denial path left it in place.
 
+## Clarifying questions
+
+![A two-question clarify card, then the same card fully answered both ways](image.png)
+
+When the agent needs a decision it asks through `clarify.request`, and the request carries
+`questions[]` — a batch, even for a single question. Each question answers on its own:
+
+- The card lists every question with **its own** choices, and stays up until the last one is
+  answered, because that is what releases the agent. Answered questions stay visible above the
+  unanswered ones, so a half-answered batch reads as half-answered.
+- The `qid` goes back as `question_id`. Without it the gateway takes a different internal path that
+  still answers `{"status":"ok"}` while the tool receives **nothing** — which is how a two-question
+  ask came back as *"the clarify tool returned no answer"* with the typed text sitting in the card
+  looking answered.
+- `clarify.respond` reports `remaining` after each answer, and the card is driven by it: the turn
+  only moves on when the list is empty. `status: "expired"` closes the card instead of claiming an
+  answer the agent never got.
+- A question that offers choices can only be answered with one of them; the tool strips a
+  `(Recommended)` decoration before the model sees the value, so the card shows the decorated label
+  and the agent receives the bare one.
+
+Both paths are verified against the real gateway: the agent's own reply to a two-question batch is
+`PostgreSQL Python`, and the live test asserts that each answer moves `remaining` from `[q1]` to
+`[]` and that the agent's finished text contains every option it was sent.
+
 ## Verification
 
 What has been checked, and how — because "it builds" is not the same claim as "it works".
@@ -172,10 +197,14 @@ real change rather than encoder noise.
 
 ## Known gaps
 
-- Clarifying questions, sudo prompts and credential prompts are implemented and unit-tested
-  against the gateway's payload shapes, but only the approval card has been driven end to end
-  against a real server — reaching `clarify.request` needs an agent that chooses to ask, and
-  `sudo.request`/`secret.request` need a host prompt.
+- The approval and clarify cards are both driven end to end against a real server — a granted
+  approval really ran its command, and a two-question clarify really delivered both answers
+  (`PostgreSQL Python`). Sudo and credential prompts are implemented and unit-tested against the
+  gateway's payload shapes, but reaching `sudo.request`/`secret.request` needs a host prompt, so
+  those two have not been driven live.
+- A clarify question that offers choices is answered from those choices. Free text is still sent
+  for a question without any, but the card does not offer a text field for a question that has
+  options, since the agent cannot use an unoffered value.
 - Haptics fire for real — the emulator exposes a vibrating device that supports `COMPOSE_EFFECTS`
   and the `TICK`/`LOW_TICK` primitives, so the platform-level record is checkable. See
   *Verification* below; what is *not* covered is how they actually feel, which needs a motor.

@@ -579,6 +579,8 @@ fun InteractionCard(
     onAnswer: (String) -> Unit,
     onCue: (HapticCue) -> Unit,
     modifier: Modifier = Modifier,
+    /** Answers one question of a clarify batch, by question id. */
+    onAnswerQuestion: (questionId: String, value: String) -> Unit = { _, value -> onAnswer(value) },
 ) {
     val accent = when (request.kind) {
         EntryKind.SUDO, EntryKind.SECRET -> MaterialTheme.colorScheme.tertiaryContainer
@@ -625,7 +627,11 @@ fun InteractionCard(
                 )
                 if (request.isPending) {
                     MetaPill(
-                        text = "Waiting",
+                        text = if (request.questions.size > 1) {
+                            "${request.unansweredCount} to answer"
+                        } else {
+                            "Waiting"
+                        },
                         container = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                         content = onAccent,
                     )
@@ -640,6 +646,14 @@ fun InteractionCard(
             }
 
             when {
+                // A clarify arrives as a batch of questions, each answered on its
+                // own; the agent stays blocked until the last one is answered.
+                request.questions.isNotEmpty() -> ClarifyQuestions(
+                    request = request,
+                    onAnswerQuestion = onAnswerQuestion,
+                    onCue = onCue,
+                )
+
                 answered != null -> Text(
                     text = "You answered: $answered",
                     style = MaterialTheme.typography.bodySmall,
@@ -738,6 +752,83 @@ fun InteractionCard(
                             onClick = {
                                 onCue(HapticCue.SENT)
                                 onAnswer(typed)
+                            },
+                            enabled = typed.isNotBlank(),
+                        ) { Text("Send") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Renders a clarify batch: every question with its own answer control.
+ *
+ * Answers already given stay visible above their unanswered siblings, because a
+ * partially answered batch is the normal middle state — the agent is still
+ * waiting, and the person answering needs to see what they have already said.
+ */
+@Composable
+private fun ClarifyQuestions(
+    request: InteractiveRequest,
+    onAnswerQuestion: (questionId: String, value: String) -> Unit,
+    onCue: (HapticCue) -> Unit,
+) {
+    if (request.expired) {
+        Text(
+            text = "The agent is no longer waiting on this, so it is closed.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        request.questions.forEach { question ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (request.questions.size > 1) {
+                    Text(
+                        text = question.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                when {
+                    question.isAnswered -> Text(
+                        text = "You answered: ${question.answer}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+
+                    request.expired -> Unit
+
+                    question.choices.isNotEmpty() -> question.choices.forEach { choice ->
+                        // A recommendation arrives as plain text in the choice, so
+                        // the first option carries the agent's own emphasis rather
+                        // than the app inventing one.
+                        Button(
+                            onClick = {
+                                onCue(HapticCue.TOOL_DONE)
+                                onAnswerQuestion(question.id, choice)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(choice) }
+                    }
+
+                    else -> {
+                        var typed by remember(request.requestId, question.id) { mutableStateOf("") }
+                        OutlinedTextField(
+                            value = typed,
+                            onValueChange = { typed = it },
+                            label = { Text("Your answer") },
+                            minLines = 1,
+                            maxLines = 4,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = {
+                                onCue(HapticCue.SENT)
+                                onAnswerQuestion(question.id, typed)
                             },
                             enabled = typed.isNotBlank(),
                         ) { Text("Send") }
