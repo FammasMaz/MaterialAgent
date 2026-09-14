@@ -34,6 +34,11 @@ steering instead of queueing, and the composer's send button becomes a stop butt
 search-first), toolsets with per-toolset toggles, skills, MCP servers, and live context-window
 and throughput usage.
 
+**Scheduled work stays readable.** A cron job fires on a schedule and each firing stores its own
+session, so a handful of automations turns the inbox into a wall of near-identical rows named
+`cron_<job>_<date>_<time>`. Every run of one job folds under a single collapsible header instead,
+newest run first, on by default and switchable from Settings.
+
 ## Material 3 Expressive
 
 The design system is centralised rather than sprinkled: `Color.kt`, `Type.kt`, `Shape.kt`,
@@ -43,7 +48,10 @@ The design system is centralised rather than sprinkled: `Color.kt`, `Type.kt`, `
 - **Motion** is split by purpose — overshooting springs for spatial changes, non-overshooting
   effect springs for colour and alpha, and settled specs when the user asks for reduced motion.
 - **Haptics** are semantic (`HapticCue`) rather than raw amplitudes, so the same cue maps to
-  the right API level on any device, and the level is a user setting.
+  the right API level on any device, and the level is a user setting. The vocabulary
+  distinguishes a tap (`UI_ACTION`), a detent (`TOGGLE`), a refresh gesture, and a destructive
+  confirm, so the heaviest pulse is reserved for the moments that deserve it. Incoming text and
+  list scrolling have their own cues and their own switches.
 - **Branding** is a vector Hermes mark that carries a gradient as a hero and falls back to a
   single gold accent at small sizes, because blending indigo into gold across a 40dp avatar
   passes through khaki.
