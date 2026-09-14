@@ -22,18 +22,18 @@
          emerging from the top of the shaft. Roots sit at x=56 / x=52, buried
          under the staff stroke, so each blade meets the shaft with no seam. -->
     <path
-        android:fillColor="#F5C24B"
+        android:fillColor="#FFFFFF"
         android:pathData="M56,43 L74,36 L71,49 L56,55 Z M52,43 L34,36 L37,49 L52,55 Z" />
 
     <!-- Staff: single thick stroke, round caps. -->
     <path
         android:pathData="M54,46 L54,75.5"
-        android:strokeColor="#FFE9C0"
+        android:strokeColor="#EADDFF"
         android:strokeWidth="7"
         android:strokeLineCap="round" />
 
     <!-- Apex orb, r=4.5. -->
     <path
-        android:fillColor="#F5C24B"
+        android:fillColor="#FFFFFF"
         android:pathData="M54,33.5 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" />
 </vector>
