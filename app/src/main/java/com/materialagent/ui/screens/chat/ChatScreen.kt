@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Search
@@ -170,6 +171,15 @@ fun ChatScreen(
     val focusManager = LocalFocusManager.current
     var menuOpen by remember { mutableStateOf(false) }
     var modelSheetOpen by remember { mutableStateOf(false) }
+    var infoSheetOpen by remember { mutableStateOf(false) }
+
+    // The stored-list row for this conversation, when there is one. It is the only
+    // source for source/message count/start time: `session.info` does not carry
+    // them, and the inbox already caches the row.
+    val storedSessions by container.sessions.sessions.collectAsStateWithLifecycle()
+    val summary = remember(transcript.storedSessionId, storedSessions) {
+        storedSessions.firstOrNull { it.id == transcript.storedSessionId }
+    }
 
     // Semantic haptics for the whole turn, filtered by the user's preference.
     LaunchedEffect(Unit) {
@@ -241,6 +251,11 @@ fun ChatScreen(
                 onStatus = {
                     menuOpen = false
                     viewModel.loadStatus()
+                },
+                onInfo = {
+                    menuOpen = false
+                    cue(HapticCue.UI_ACTION)
+                    infoSheetOpen = true
                 },
                 onSettings = {
                     menuOpen = false
@@ -399,6 +414,15 @@ fun ChatScreen(
         }
     }
 
+    if (infoSheetOpen) {
+        SessionInfoSheet(
+            transcript = transcript,
+            summary = summary,
+            onCue = cue,
+            onDismiss = { infoSheetOpen = false },
+        )
+    }
+
     if (modelSheetOpen) {
         ModelPickerSheet(
             onDismiss = { modelSheetOpen = false },
@@ -476,6 +500,7 @@ private fun ChatTopBar(
     onInterrupt: () -> Unit,
     onBranch: () -> Unit,
     onStatus: () -> Unit,
+    onInfo: () -> Unit,
     onSettings: () -> Unit,
 ) {
     Surface(
@@ -554,6 +579,11 @@ private fun ChatTopBar(
                             Icon(Icons.AutoMirrored.Rounded.CallSplit, contentDescription = null)
                         },
                         onClick = onBranch,
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Conversation info") },
+                        leadingIcon = { Icon(Icons.Rounded.Info, contentDescription = null) },
+                        onClick = onInfo,
                     )
                     DropdownMenuItem(
                         text = { Text("Server status") },

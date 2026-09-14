@@ -182,6 +182,14 @@ data class SessionInfo(
     val approvalMode: String?,
     val cwd: String?,
     val branch: String?,
+    /**
+     * The desktop *project* the session was opened from, and where its commands
+     * actually run. Both come from `session.info` and neither is optional in the
+     * sense a user cares about — "which checkout, on which machine" is the
+     * difference between two sessions that otherwise read identically.
+     */
+    val project: String?,
+    val terminalBackend: String?,
     val title: String?,
     val storedSessionId: String?,
     val profileName: String?,
@@ -207,6 +215,8 @@ data class SessionInfo(
                 approvalMode = payload.str("approval_mode"),
                 cwd = payload.str("cwd"),
                 branch = payload.str("branch"),
+                project = payload.str("project"),
+                terminalBackend = payload.str("terminal_backend"),
                 title = payload.str("title"),
                 storedSessionId = payload.str("stored_session_id"),
                 profileName = payload.str("profile_name"),
