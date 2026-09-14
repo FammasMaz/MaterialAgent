@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The only directory this app ever hands to another process: downloaded update
-  APKs, which the platform installer reads back through a content:// URI. The
-  path matches the `<cache-path name="updates" path="updates/">` the updater
-  writes to — cacheDir/updates.
+  The two directories this app ever hands to another process, both under the
+  cache the platform lets us clean up.
+
+  `updates/` holds a downloaded APK, which the installer reads back through a
+  content:// URI. `media/` holds an attachment the agent sent — a PDF, a
+  recording, a clip — after it has been fetched with the signed-in HTTP client
+  and before an open/share intent passes it to a viewer. Neither may be handed
+  over as a file:// path: that throws FileUriExposedException on every Android
+  this app supports.
 -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path
         name="updates"
         path="updates/" />
+    <cache-path
+        name="media"
+        path="media/" />
 </paths>

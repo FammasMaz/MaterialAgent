@@ -95,6 +95,7 @@ import com.materialagent.ui.components.MarkdownText
 import com.materialagent.ui.components.StreamingText
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.PlainCodeBlock
+import com.materialagent.ui.components.media.MediaStrip
 import com.materialagent.ui.components.pressScale
 import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.LocalMotionLevel
@@ -237,6 +238,13 @@ fun AssistantBlock(
 
         if (entry.isStreaming && entry.text.isNotBlank()) {
             StreamingCaret(style = MaterialTheme.typography.bodyLarge)
+        }
+
+        // Attachments sit under the prose that announced them. They only ever
+        // arrive on `message.complete`, so a half-typed answer never shows a
+        // player for a file the agent has not finished naming.
+        if (entry.media.isNotEmpty()) {
+            MediaStrip(media = entry.media)
         }
 
         if (entry.error != null) {

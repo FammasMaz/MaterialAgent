@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 
 /**
  * The app's object graph, built once and held by the Application.
@@ -26,6 +27,14 @@ class AppContainer(context: Context) {
     val settings = SettingsStore(context)
     val secrets = SecretStore(context)
     val haptics = Haptics(context)
+
+    /**
+     * The app's single HTTP client, published so features that fetch their own
+     * bytes (chat attachments) reuse the session its cookie jar holds. A second
+     * client would be a second, unauthenticated session, and the gateway answers
+     * 401 to that.
+     */
+    val http: OkHttpClient = Http.client
 
     val connection = HermesConnection(Http.client, secrets, scope)
     val sessions = SessionRepository(connection, scope)

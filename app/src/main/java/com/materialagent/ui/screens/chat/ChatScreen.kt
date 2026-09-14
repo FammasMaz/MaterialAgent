@@ -70,6 +70,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -99,9 +100,12 @@ import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.MetaPill
+import com.materialagent.ui.components.media.LocalMediaEnvironment
+import com.materialagent.ui.components.media.rememberMediaEnvironment
 import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.components.NoticeBanner
 import com.materialagent.ui.containerViewModel
+import com.materialagent.ui.rememberContainer
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
 import com.materialagent.ui.theme.alphaSpec
@@ -146,6 +150,17 @@ fun ChatScreen(
     val showTools = LocalShowToolCalls.current
     val streamingHaptics = LocalStreamingHaptics.current
     val scrollHaptics = LocalScrollHaptics.current
+
+    /*
+     * Media rows fetch their own bytes, so they need the signed-in server and
+     * the app's shared HTTP client — the jar on that client is what carries the
+     * sign-in the gateway demands. This screen is the composition root for the
+     * transcript, so it builds that environment once and publishes it below,
+     * rather than threading a transport through every row renderer between here
+     * and an attachment.
+     */
+    val container = rememberContainer()
+    val mediaEnv = rememberMediaEnvironment(connection.baseUrlOrNull(), container.http)
 
     // Keeps the screen pointed at whatever session the route names, including a
     // switch to a freshly branched sibling that lands on this same destination.
@@ -279,56 +294,60 @@ fun ChatScreen(
                         orbSize = 88.dp,
                     )
 
-                    else -> LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            // Ticks under the finger, never for the auto-scroll that
-                            // follows a streaming answer.
-                            .scrollHaptics(scrollHaptics),
-                        contentPadding = PaddingValues(top = 12.dp, bottom = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    else -> CompositionLocalProvider(
+                        LocalMediaEnvironment provides mediaEnv,
                     ) {
-                        entries.forEach { entry ->
-                            item(key = entry.id) {
-                                Box(
-                                    modifier = Modifier.animateItem(
-                                        fadeInSpec = alphaSpec(),
-                                        // A streaming row changes height on almost every
-                                        // frame; animating its placement fights the
-                                        // auto-scroll and reads as vertical jitter.
-                                        placementSpec = if (entry.isStreaming) {
-                                            null
-                                        } else {
-                                            placementSpec()
-                                        },
-                                        // Instant removal, so a regenerated turn never
-                                        // leaves a ghost of its old text behind.
-                                        fadeOutSpec = null,
-                                    ),
-                                ) {
-                                    TranscriptRow(
-                                        entry = entry,
-                                        showReasoning = showReasoning,
-                                        showTools = showTools,
-                                        onAnswer = { value ->
-                                            entry.interactive?.let { request ->
-                                                viewModel.answer(request, value)
-                                            }
-                                        },
-                                        onAnswerQuestion = { questionId, value ->
-                                            entry.interactive?.let { request ->
-                                                viewModel.answer(request, value, questionId)
-                                            }
-                                        },
-                                        onCue = cue,
-                                    )
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // Ticks under the finger, never for the auto-scroll that
+                                // follows a streaming answer.
+                                .scrollHaptics(scrollHaptics),
+                            contentPadding = PaddingValues(top = 12.dp, bottom = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) {
+                            entries.forEach { entry ->
+                                item(key = entry.id) {
+                                    Box(
+                                        modifier = Modifier.animateItem(
+                                            fadeInSpec = alphaSpec(),
+                                            // A streaming row changes height on almost every
+                                            // frame; animating its placement fights the
+                                            // auto-scroll and reads as vertical jitter.
+                                            placementSpec = if (entry.isStreaming) {
+                                                null
+                                            } else {
+                                                placementSpec()
+                                            },
+                                            // Instant removal, so a regenerated turn never
+                                            // leaves a ghost of its old text behind.
+                                            fadeOutSpec = null,
+                                        ),
+                                    ) {
+                                        TranscriptRow(
+                                            entry = entry,
+                                            showReasoning = showReasoning,
+                                            showTools = showTools,
+                                            onAnswer = { value ->
+                                                entry.interactive?.let { request ->
+                                                    viewModel.answer(request, value)
+                                                }
+                                            },
+                                            onAnswerQuestion = { questionId, value ->
+                                                entry.interactive?.let { request ->
+                                                    viewModel.answer(request, value, questionId)
+                                                }
+                                            },
+                                            onCue = cue,
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        if (transcript.running) {
-                            item(key = "running-indicator") {
-                                WorkingIndicator(elapsed = elapsed)
+                            if (transcript.running) {
+                                item(key = "running-indicator") {
+                                    WorkingIndicator(elapsed = elapsed)
+                                }
                             }
                         }
                     }
@@ -731,6 +750,23 @@ private fun Composer(
 }
 
 private enum class ComposerAction { SEND, STEER, STOP }
+
+/**
+ * The address media rows should fetch from, for whichever connection state the
+ * app is in.
+ *
+ * Every non-idle state carries a profile, including a failed one: the transcript
+ * on screen is still that server's, and its attachments should keep resolving
+ * while a reconnect is in progress. Only [ConnectionStatus.Idle] — no profile
+ * configured at all — has nothing to point at.
+ */
+private fun ConnectionStatus.baseUrlOrNull(): String? = when (this) {
+    is ConnectionStatus.Connected -> profile.baseUrl
+    is ConnectionStatus.Reconnecting -> profile.baseUrl
+    is ConnectionStatus.Connecting -> profile.baseUrl
+    is ConnectionStatus.Failed -> profile?.baseUrl
+    ConnectionStatus.Idle -> null
+}
 
 /** One row of the model picker: `qualified` is what gets sent to the server. */
 private data class ModelChoice(
