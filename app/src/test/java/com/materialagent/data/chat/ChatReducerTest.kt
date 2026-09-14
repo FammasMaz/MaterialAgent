@@ -1,7 +1,9 @@
 package com.materialagent.data.chat
 
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -368,6 +370,72 @@ class ChatReducerTest {
         assertEquals("keep me", state.title)
         assertTrue(state.running)
         assertTrue(state.entries.isEmpty())
+    }
+
+    @Test
+    fun anApprovalCarriesTheServersChoices() {
+        // The card can only offer the answers the server named; dropping these
+        // left it with a blank text field and no way to approve anything.
+        val state = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                GatewayEvent.APPROVAL_REQUEST,
+                buildJsonObject {
+                    put("request_id", "req-1")
+                    put("description", "delete in root path")
+                    put("command", "rm -rf /tmp/probe-dir")
+                    put(
+                        "choices",
+                        buildJsonArray {
+                            listOf("once", "session", "always", "deny").forEach { add(JsonPrimitive(it)) }
+                        },
+                    )
+                },
+            ),
+            now = 100.0,
+        )
+        val request = state.entries.single().interactive!!
+        assertEquals(EntryKind.APPROVAL, request.kind)
+        assertEquals("delete in root path", request.title)
+        assertEquals(listOf("once", "session", "always", "deny"), request.choices)
+        assertTrue(request.isPending)
+    }
+
+    @Test
+    fun aFinishedTurnClosesAnUnansweredRequest() {
+        // The gateway fails an unanswered approval closed, so once the turn is
+        // over the card must stop offering buttons for something nothing is
+        // listening to any more.
+        val pending = ChatReducer.reduce(
+            ChatTranscript(),
+            event(
+                GatewayEvent.APPROVAL_REQUEST,
+                buildJsonObject {
+                    put("request_id", "req-1")
+                    put("command", "rm -rf /tmp/probe-dir")
+                },
+            ),
+            now = 100.0,
+        )
+        val running = ChatReducer.reduce(
+            pending,
+            event(GatewayEvent.MESSAGE_START, buildJsonObject { put("timestamp", 101.0) }),
+            now = 101.0,
+        )
+        assertTrue("the request is still answerable mid-turn", running.pendingInteractions.isNotEmpty())
+
+        val finished = ChatReducer.reduce(
+            running,
+            event(
+                GatewayEvent.MESSAGE_COMPLETE,
+                buildJsonObject { put("text", "The terminal blocked it."); put("timestamp", 102.0) },
+            ),
+            now = 102.0,
+        )
+        val request = finished.entries.mapNotNull { it.interactive }.single()
+        assertTrue("the turn ending closes it", request.expired)
+        assertFalse("and it stops counting as waiting", request.isPending)
+        assertTrue("so it needs no attention", finished.pendingInteractions.isEmpty())
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

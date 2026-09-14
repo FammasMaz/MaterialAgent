@@ -41,14 +41,24 @@ data class InteractiveRequest(
     val kind: EntryKind,
     val title: String,
     val detail: String,
+    /**
+     * Allowed answers, straight from the server — for approvals the vocabulary is
+     * `once` / `session` / `always` / `deny`, and `always` is simply absent when
+     * the policy forbids a permanent allow.
+     */
     val choices: List<String> = emptyList(),
     val multiSelect: Boolean = false,
-    /** `approval.request.allow_permanent` — false when the policy forbids "always allow". */
-    val allowPermanent: Boolean = false,
     /** Set to the chosen answer once the user responds. */
     val answer: String? = null,
+    /**
+     * The request stopped being answerable before anyone answered it — the
+     * gateway fails an unanswered approval closed on a timeout, and the turn
+     * ends without it. An unanswered card would otherwise sit there claiming to
+     * be "Waiting" for something that no longer exists.
+     */
+    val expired: Boolean = false,
 ) {
-    val isPending: Boolean get() = answer == null
+    val isPending: Boolean get() = answer == null && !expired
 }
 
 /** One row in the chat transcript. */

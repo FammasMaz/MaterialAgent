@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -36,6 +37,10 @@ data class ResumedSession(
     val title: String,
     val messages: List<HistoryRow>,
     val info: SessionInfo?,
+    /** An approval that was still waiting when the session was reopened. */
+    val pendingApproval: JsonObject? = null,
+    /** A question that was still waiting when the session was reopened. */
+    val pendingClarify: JsonObject? = null,
 )
 
 /**
@@ -136,6 +141,10 @@ class SessionRepository(
                 ?.mapNotNull { it.objOrNull()?.let(HistoryRow::from) }
                 .orEmpty(),
             info = SessionInfo.from(payload.obj("info")),
+            // The gateway replays what was still blocking the session, so a card
+            // that arrived while the socket was down is not lost on reconnect.
+            pendingApproval = payload.obj("pending_approval"),
+            pendingClarify = payload.obj("pending_clarify"),
         )
     }
 

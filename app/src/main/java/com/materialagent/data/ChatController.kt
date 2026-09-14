@@ -1,5 +1,7 @@
 package com.materialagent.data
 
+import com.materialagent.core.HermesRpcException
+import com.materialagent.core.InteractionParams
 import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.data.chat.ChatReducer
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -97,6 +100,8 @@ class ChatController(
                             ?: titleHint.orEmpty()
                     },
                     info = resumed.info,
+                    pendingApproval = resumed.pendingApproval,
+                    pendingClarify = resumed.pendingClarify,
                 )
                 observe(resumed.sessionId)
                 Result.success(Unit)
@@ -196,6 +201,34 @@ class ChatController(
 
     // ── User intent ─────────────────────────────────────────────────────────
 
+    /**
+     * Runs a session-scoped call against a runtime id that the gateway may have
+     * re-minted while the app was away.
+     *
+     * The runtime id from `session.create`/`session.resume` is not durable across
+     * a reconnect: after the socket drops and comes back, the gateway answers
+     * `4001 session not found` for the id the transcript is still holding, and
+     * every session-scoped method fails the same way — sending a turn, steering,
+     * stopping, answering an approval, switching model. The durable id is not
+     * affected, so the fix is to resume by it, adopt the new runtime id, and try
+     * once more. Only a "session is gone" failure is retried; anything else is
+     * reported as-is.
+     */
+    private suspend fun <T> withLiveSession(
+        block: suspend (String) -> Result<T>,
+    ): Result<T> {
+        val current = _transcript.value.sessionId
+            ?: return Result.failure(IllegalStateException("No open session"))
+        val stored = _transcript.value.storedSessionId
+        val first = block(current)
+        val error = first.exceptionOrNull()
+        if (stored == null || error !is HermesRpcException || !error.isSessionGone) return first
+        val resumed = sessions.resume(stored).getOrElse { return first }
+        _transcript.value = _transcript.value.copy(sessionId = resumed.sessionId)
+        observe(resumed.sessionId)
+        return block(resumed.sessionId)
+    }
+
     suspend fun submit(text: String): Result<Unit> {
         val sessionId = _transcript.value.sessionId
         if (text.isBlank()) return Result.success(Unit)
@@ -209,13 +242,15 @@ class ChatController(
         _sending.value = true
         _cues.tryEmit(HapticCue.SENT)
 
-        val result = connection.send(
-            "prompt.submit",
-            buildJsonObject {
-                put("session_id", JsonPrimitive(liveId))
-                put("text", JsonPrimitive(text))
-            },
-        )
+        val result = withLiveSession { runtimeId ->
+            connection.send(
+                "prompt.submit",
+                buildJsonObject {
+                    put("session_id", JsonPrimitive(runtimeId))
+                    put("text", JsonPrimitive(text))
+                },
+            )
+        }
         _sending.value = false
         if (result.isFailure) {
             _transcript.value = _transcript.value.copy(
@@ -227,8 +262,8 @@ class ChatController(
     }
 
     suspend fun interrupt(): Result<Unit> {
-        val sessionId = _transcript.value.sessionId ?: return Result.success(Unit)
-        val result = sessions.interrupt(sessionId)
+        if (_transcript.value.sessionId == null) return Result.success(Unit)
+        val result = withLiveSession { sessions.interrupt(it) }
         if (result.isSuccess) {
             _transcript.value = _transcript.value.copy(running = false, turnStartedAt = null)
             _cues.tryEmit(HapticCue.INTERRUPTED)
@@ -236,40 +271,36 @@ class ChatController(
         return result
     }
 
-    suspend fun steer(text: String): Result<Unit> {
-        val sessionId = _transcript.value.sessionId ?: return Result.success(Unit)
-        return sessions.steer(sessionId, text)
-    }
+    suspend fun steer(text: String): Result<Unit> = withLiveSession { sessions.steer(it, text) }
 
-    suspend fun approve(requestId: String, decision: String, permanent: Boolean = false): Result<Unit> =
-        respond("approval.respond", requestId, decision, permanent)
+    /**
+     * Answers a blocking interaction. The parameter shapes live in
+     * [InteractionParams] with the rest of the wire contract.
+     */
+    suspend fun approve(requestId: String, choice: String): Result<Unit> =
+        respond("approval.respond", requestId, choice) { InteractionParams.approval(it, requestId, choice) }
 
     suspend fun answerClarification(requestId: String, answer: String): Result<Unit> =
-        respond("clarify.respond", requestId, answer)
+        respond("clarify.respond", requestId, answer) { InteractionParams.clarify(requestId, answer) }
 
     suspend fun answerSudo(requestId: String, password: String): Result<Unit> =
-        respond("sudo.respond", requestId, password)
+        respond("sudo.respond", requestId, password) { InteractionParams.sudo(requestId, password) }
 
     suspend fun answerSecret(requestId: String, value: String): Result<Unit> =
-        respond("secret.respond", requestId, value)
+        respond("secret.respond", requestId, value) { InteractionParams.secret(requestId, value) }
 
     private suspend fun respond(
         method: String,
         requestId: String,
-        value: String,
-        permanent: Boolean = false,
+        uiValue: String,
+        build: (String) -> JsonObject,
     ): Result<Unit> {
-        val sessionId = _transcript.value.sessionId
-        val params = buildJsonObject {
-            put("request_id", JsonPrimitive(requestId))
-            put("response", JsonPrimitive(value))
-            put("value", JsonPrimitive(value))
-            if (permanent) put("allow_permanent", JsonPrimitive(true))
-            if (sessionId != null) put("session_id", JsonPrimitive(sessionId))
+        if (_transcript.value.sessionId == null) {
+            return Result.failure(IllegalStateException("No open session to answer in"))
         }
-        val result = connection.send(method, params)
+        val result = withLiveSession { runtimeId -> connection.send(method, build(runtimeId)) }
         _transcript.value = result.fold(
-            onSuccess = { ChatReducer.markInteractionAnswered(_transcript.value, requestId, value) },
+            onSuccess = { ChatReducer.markInteractionAnswered(_transcript.value, requestId, uiValue) },
             onFailure = { error ->
                 ChatReducer.failInteraction(
                     _transcript.value,
@@ -281,20 +312,13 @@ class ChatController(
         return result.map { }
     }
 
-    suspend fun setModel(model: String): Result<Unit> {
-        val sessionId = _transcript.value.sessionId ?: return Result.success(Unit)
-        return sessions.setModel(sessionId, model)
-    }
+    suspend fun setModel(model: String): Result<Unit> = withLiveSession { sessions.setModel(it, model) }
 
-    suspend fun setReasoning(effort: String): Result<Unit> {
-        val sessionId = _transcript.value.sessionId ?: return Result.success(Unit)
-        return sessions.setReasoning(sessionId, effort)
-    }
+    suspend fun setReasoning(effort: String): Result<Unit> =
+        withLiveSession { sessions.setReasoning(it, effort) }
 
-    suspend fun setFast(enabled: Boolean): Result<Unit> {
-        val sessionId = _transcript.value.sessionId ?: return Result.success(Unit)
-        return sessions.setFast(sessionId, enabled)
-    }
+    suspend fun setFast(enabled: Boolean): Result<Unit> =
+        withLiveSession { sessions.setFast(it, enabled) }
 
     /** True when the transcript has a blocking question waiting for the user. */
     fun needsAttention(): Boolean = _transcript.value.pendingInteractions.isNotEmpty()

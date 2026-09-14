@@ -576,7 +576,7 @@ fun TodosCard(
 @Composable
 fun InteractionCard(
     request: InteractiveRequest,
-    onAnswer: (String, Boolean) -> Unit,
+    onAnswer: (String) -> Unit,
     onCue: (HapticCue) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -623,7 +623,7 @@ fun InteractionCard(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
-                if (answered == null) {
+                if (request.isPending) {
                     MetaPill(
                         text = "Waiting",
                         container = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
@@ -646,6 +646,14 @@ fun InteractionCard(
                     fontWeight = FontWeight.SemiBold,
                 )
 
+                // The turn ended with this still unanswered, so it is no longer
+                // answerable — say so rather than showing live buttons.
+                request.expired -> Text(
+                    text = "The turn ended before this was answered, so it is closed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onAccent.copy(alpha = 0.8f),
+                )
+
                 request.kind == EntryKind.SUDO || request.kind == EntryKind.SECRET -> {
                     OutlinedTextField(
                         value = typed,
@@ -663,7 +671,7 @@ fun InteractionCard(
                             onDone = {
                                 if (typed.isNotBlank()) {
                                     onCue(HapticCue.NEEDS_ATTENTION)
-                                    onAnswer(typed, false)
+                                    onAnswer(typed)
                                 }
                             },
                         ),
@@ -674,43 +682,44 @@ fun InteractionCard(
                         Button(
                             onClick = {
                                 onCue(HapticCue.NEEDS_ATTENTION)
-                                onAnswer(typed, false)
+                                onAnswer(typed)
                             },
                             enabled = typed.isNotBlank(),
                         ) { Text("Send") }
-                        TextButton(onClick = { onAnswer("cancel", false) }) { Text("Cancel") }
+                        TextButton(onClick = { onAnswer("cancel") }) { Text("Cancel") }
                     }
                 }
 
                 request.choices.isNotEmpty() -> Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    request.choices.forEachIndexed { index, choice ->
-                        if (index == 0 && request.kind == EntryKind.APPROVAL) {
+                    request.choices.forEach { choice ->
+                        // Approvals are the one place the server's tokens are shown
+                        // to a person, so they get spelled out. The token itself is
+                        // what goes back — it is the server's vocabulary, not a label.
+                        val label = if (request.kind == EntryKind.APPROVAL) {
+                            approvalLabel(choice)
+                        } else {
+                            choice
+                        }
+                        val calm = choice == "deny" || choice == "cancel"
+                        if (calm) {
+                            TextButton(
+                                onClick = {
+                                    onCue(HapticCue.SENT)
+                                    onAnswer(choice)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text(label) }
+                        } else {
                             Button(
                                 onClick = {
                                     onCue(HapticCue.TOOL_DONE)
-                                    onAnswer(choice, false)
+                                    onAnswer(choice)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                            ) { Text(choice) }
-                        } else {
-                            FilledTonalButton(
-                                onClick = {
-                                    onCue(HapticCue.SENT)
-                                    onAnswer(choice, false)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text(choice) }
+                            ) { Text(label) }
                         }
-                    }
-                    if (request.allowPermanent && request.kind == EntryKind.APPROVAL) {
-                        TextButton(
-                            onClick = {
-                                onCue(HapticCue.TOOL_DONE)
-                                onAnswer(request.choices.firstOrNull() ?: "allow", true)
-                            },
-                        ) { Text("Always allow this") }
                     }
                 }
 
@@ -728,7 +737,7 @@ fun InteractionCard(
                         Button(
                             onClick = {
                                 onCue(HapticCue.SENT)
-                                onAnswer(typed, false)
+                                onAnswer(typed)
                             },
                             enabled = typed.isNotBlank(),
                         ) { Text("Send") }
@@ -744,6 +753,19 @@ fun InteractionCard(
 private val prettyJson = Json { prettyPrint = true }
 
 private fun prettyJson(obj: JsonObject): String = prettyJson.encodeToString(JsonObject.serializer(), obj)
+
+/**
+ * Spells out an `approval.request` choice for the person reading the card. The
+ * server sends bare tokens (`once`, `session`, `always`, `deny`) and an unknown
+ * one falls through unchanged rather than being hidden.
+ */
+internal fun approvalLabel(choice: String): String = when (choice) {
+    "once" -> "Allow once"
+    "session" -> "Allow for this session"
+    "always" -> "Always allow"
+    "deny" -> "Deny"
+    else -> choice
+}
 
 internal fun formatDuration(seconds: Double): String = when {
     seconds < 1 -> "${(seconds * 1000).toInt()}ms"

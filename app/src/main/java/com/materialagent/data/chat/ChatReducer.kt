@@ -50,7 +50,20 @@ object ChatReducer {
     fun reduce(state: ChatTranscript, event: GatewayEvent, now: Double): ChatTranscript {
         val payload = event.payload
         val stamp = payload.double("timestamp") ?: now
-        return when (event.type) {
+        val next = reduceEvent(state, event, payload, stamp, now)
+        // When a turn finishes, anything still waiting on the user is finished
+        // too: the gateway fails an unanswered approval closed, so nothing is
+        // left listening for a late answer.
+        return if (state.running && !next.running) expirePendingInteractions(next, stamp) else next
+    }
+
+    private fun reduceEvent(
+        state: ChatTranscript,
+        event: GatewayEvent,
+        payload: JsonObject?,
+        stamp: Double,
+        now: Double,
+    ): ChatTranscript = when (event.type) {
             GatewayEvent.MESSAGE_START -> state.copy(running = true, turnStartedAt = state.turnStartedAt ?: now)
 
             GatewayEvent.MESSAGE_DELTA -> {
@@ -264,9 +277,15 @@ object ChatReducer {
             GatewayEvent.APPROVAL_REQUEST -> state.appendInteraction(
                 kind = EntryKind.APPROVAL,
                 requestId = event.requestId ?: "approval-${stamp}",
+                // `description` is the policy's reason ("delete in root path"),
+                // which reads better as the heading than the command itself.
                 title = payload.strAny("description", "command").orEmpty().ifBlank { "Approval required" },
                 detail = payload.str("command").orEmpty(),
-                allowPermanent = payload.bool("allow_permanent") ?: false,
+                // The server decides what may be offered — `once`, `session`,
+                // `always`, `deny` — and omits `always` when the policy forbids
+                // it. Dropping these left the card with a blank text field and no
+                // way to answer.
+                choices = payload.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
                 stamp = stamp,
             )
 
@@ -331,7 +350,25 @@ object ChatReducer {
             }
 
             else -> state
-        }
+    }
+
+    /**
+     * Retires interactions that a finished turn left unanswered.
+     *
+     * The gateway fails an unanswered approval closed — a dropped socket or a
+     * timeout denies it and the tool returns "blocked" — after which the card can
+     * no longer be answered. Leaving it on screen with live buttons offered a
+     * dead action, so the turn ending is what closes it.
+     */
+    fun expirePendingInteractions(state: ChatTranscript, stamp: Double): ChatTranscript {
+        if (state.entries.none { it.interactive?.isPending == true }) return state
+        return state.copy(
+            entries = state.entries.map { entry ->
+                val request = entry.interactive
+                if (request == null || !request.isPending) entry
+                else entry.copy(interactive = request.copy(expired = true))
+            },
+        )
     }
 
     /** Rebuilds a transcript from durable `session.history` rows. */
@@ -342,6 +379,8 @@ object ChatReducer {
         storedSessionId: String?,
         title: String,
         info: SessionInfo?,
+        pendingApproval: JsonObject? = null,
+        pendingClarify: JsonObject? = null,
     ): ChatTranscript {
         val entries = mutableListOf<TranscriptEntry>()
         rows.forEachIndexed { index, row ->
@@ -394,8 +433,33 @@ object ChatReducer {
                 )
             }
         }
-        return state.copy(
-            entries = entries,
+        // A replayed interaction is rendered exactly like a live one: the gateway
+        // builds both from the same payload, and the request_id inside it is what
+        // the response is keyed by.
+        var restored = state
+        pendingApproval?.let { approval ->
+            restored = restored.appendInteraction(
+                kind = EntryKind.APPROVAL,
+                requestId = approval.str("request_id") ?: "approval-replayed",
+                title = approval.strAny("description", "command").orEmpty().ifBlank { "Approval required" },
+                detail = approval.str("command").orEmpty(),
+                choices = approval.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
+                stamp = approval.double("timestamp") ?: 0.0,
+            )
+        }
+        pendingClarify?.let { clarify ->
+            restored = restored.appendInteraction(
+                kind = EntryKind.CLARIFY,
+                requestId = clarify.str("request_id") ?: "clarify-replayed",
+                title = clarify.strAny("question", "prompt").orEmpty().ifBlank { "The agent has a question" },
+                detail = "",
+                choices = clarify.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty(),
+                multiSelect = clarify.bool("multi_select") ?: false,
+                stamp = clarify.double("timestamp") ?: 0.0,
+            )
+        }
+        return restored.copy(
+            entries = restored.entries + entries,
             sessionId = sessionId,
             storedSessionId = storedSessionId,
             title = title.ifBlank { state.title },
@@ -431,7 +495,6 @@ object ChatReducer {
         detail: String,
         choices: List<String> = emptyList(),
         multiSelect: Boolean = false,
-        allowPermanent: Boolean = false,
         stamp: Double,
     ): ChatTranscript {
         if (entries.any { it.interactive?.requestId == requestId }) return this
@@ -446,7 +509,6 @@ object ChatReducer {
                 detail = detail,
                 choices = choices,
                 multiSelect = multiSelect,
-                allowPermanent = allowPermanent,
             ),
         )
         return copy(entries = sealStreaming(this).entries + entry)

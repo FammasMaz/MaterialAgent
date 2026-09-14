@@ -100,11 +100,11 @@ class ChatViewModel(
         }
     }
 
-    fun answer(request: InteractiveRequest, value: String, permanent: Boolean = false) {
+    fun answer(request: InteractiveRequest, value: String) {
         viewModelScope.launch {
             val result = when (request.kind) {
                 com.materialagent.data.chat.EntryKind.APPROVAL ->
-                    container.chat.approve(request.requestId, value, permanent)
+                    container.chat.approve(request.requestId, value)
                 com.materialagent.data.chat.EntryKind.CLARIFY ->
                     container.chat.answerClarification(request.requestId, value)
                 com.materialagent.data.chat.EntryKind.SUDO ->

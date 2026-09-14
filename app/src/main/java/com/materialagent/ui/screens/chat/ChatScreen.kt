@@ -302,9 +302,9 @@ fun ChatScreen(
                                         entry = entry,
                                         showReasoning = showReasoning,
                                         showTools = showTools,
-                                        onAnswer = { value, permanent ->
+                                        onAnswer = { value ->
                                             entry.interactive?.let { request ->
-                                                viewModel.answer(request, value, permanent)
+                                                viewModel.answer(request, value)
                                             }
                                         },
                                         onCue = cue,
@@ -380,7 +380,7 @@ private fun TranscriptRow(
     entry: TranscriptEntry,
     showReasoning: Boolean,
     showTools: Boolean,
-    onAnswer: (String, Boolean) -> Unit,
+    onAnswer: (String) -> Unit,
     onCue: (HapticCue) -> Unit,
 ) {
     when (entry.kind) {
