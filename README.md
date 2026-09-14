@@ -78,6 +78,15 @@ HERMES_TEST_TOKEN="$(cat .hermes-test-token)" \
   ./gradlew :app:testDebugUnitTest --tests '*HermesLiveTest*'
 ```
 
+Testing against a real gateway leaves conversations behind, so
+`scripts/session-cleanup.py` lists them and, with `--delete`, removes the ones this
+project's testing made. It matches an explicit allow-list of titles rather than a
+pattern: the server also holds real conversations, and a fuzzy match would delete
+them. A branch probe also leaves a 0-message stored session behind, which the
+script recognises. Deleting an open session answers `4023 cannot delete an active
+session`, so it resumes the stored id to get the runtime id, closes that, and then
+deletes.
+
 Without a token the live tests skip rather than fail, so a clean checkout and CI
 both stay green. The dev server takes its token from `HERMES_DASHBOARD_SESSION_TOKEN`.
 
