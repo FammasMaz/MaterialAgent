@@ -1,5 +1,6 @@
 package com.materialagent.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -31,12 +32,14 @@ import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import kotlin.math.max
+import kotlin.math.min
 import com.materialagent.data.MotionLevel
 import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalMotionLevel
@@ -175,9 +178,11 @@ private fun serpentPath(
 /**
  * The agent's polymorphic body.
  *
- * Cycles through Material shapes on a slow, non-overshooting tick. Used as the
- * "working" indicator, the empty-state hero and the session avatar, so the
- * agent has one recognisable silhouette everywhere.
+ * Metamorphoses through five Material shapes - easing into each one, holding it for
+ * a beat, then easing on - in one fixed frame of reference, so nothing about the
+ * drawn size or centre depends on the shape of the moment. Used as the "working"
+ * indicator, the empty-state hero and the session avatar, so the agent has one
+ * recognisable silhouette everywhere.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -205,61 +210,95 @@ fun AgentOrb(
         )
     }
 
+    // One frame of reference for every shape and every point of every morph between
+    // them: the union of the five shapes' bounds. The previous version fitted each
+    // frame's *own* bounds to the canvas instead, so as a morph moved, the drawn
+    // shape was re-fitted every frame - and because that fit scaled x and y
+    // independently, the aspect ratio changed too. A silhouette change therefore
+    // looked like a wobbling, stretching blob.
+    val fit = remember(shapes) { unionBounds(shapes) }
+    val morphs = remember(shapes) {
+        shapes.indices.map { index -> Morph(shapes[index], shapes[(index + 1) % shapes.size]) }
+    }
+
     if (!active || reduced) {
         Canvas(modifier = modifier.size(size)) {
-            drawPolygonPath(Morph(shapes.first(), shapes.first()).toPath(progress = 0f, startAngle = 0), gradient(colors))
+            drawOrbPath(morphs.first().toPath(progress = 0f, startAngle = 0), gradient(colors), fit)
         }
         return
     }
 
-    val totalCycles = shapes.size
+    val steps = shapes.size
+    val stepMillis = 1400
+    val holdFraction = 0.36f
     val transition = rememberInfiniteTransition(label = "orb")
     val tick by transition.animateFloat(
         initialValue = 0f,
-        targetValue = totalCycles.toFloat(),
+        targetValue = steps.toFloat(),
         animationSpec = infiniteRepeatable(
-            tween(durationMillis = 1100 * totalCycles, easing = LinearEasing),
+            tween(durationMillis = stepMillis * steps, easing = LinearEasing),
             RepeatMode.Restart,
         ),
         label = "orbTick",
     )
-    val spin by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(9000, easing = LinearEasing), RepeatMode.Restart),
-        label = "orbAngle",
-    )
-
-    val morphs = remember(shapes) {
-        shapes.indices.map { index ->
-            Morph(shapes[index], shapes[(index + 1) % shapes.size])
-        }
-    }
 
     Canvas(modifier = modifier.size(size)) {
-        val index = tick.toInt().coerceIn(0, totalCycles - 1)
-        val progress = (tick - index).coerceIn(0f, 0.999f)
-        val path = morphs[index].toPath(progress = progress, startAngle = 0)
-        rotate(spin, pivot = center) {
-            drawPolygonPath(path, gradient(colors))
-        }
+        val index = tick.toInt().coerceIn(0, steps - 1)
+        val step = (tick - index).coerceIn(0f, 1f)
+        // Morph across the first 64% of the step, hold for the rest: the silhouette
+        // lands exactly on the integer boundary where the next Morph pair takes
+        // over, so the loop is continuous and each shape gets a beat to be read.
+        val progress = FastOutSlowInEasing
+            .transform((step / (1f - holdFraction)).coerceIn(0f, 1f))
+        drawOrbPath(morphs[index].toPath(progress = progress, startAngle = 0), gradient(colors), fit)
     }
 }
 
-/** Fits [path]'s bounding box to the draw area and fills it. */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPolygonPath(
+/**
+ * Fills [path] inside one fixed frame of reference, [fit] being the union of every
+ * shape's bounds as `[minX, minY, maxX, maxY]`.
+ *
+ * The scale is a single factor for both axes, so a shape can be neither stretched
+ * nor resized by the morph it happens to be part of.
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOrbPath(
     path: Path,
     brush: Brush,
+    fit: FloatArray,
 ) {
-    val bounds = path.getBounds()
-    if (bounds.width <= 0f || bounds.height <= 0f) return
+    val shapeWidth = fit[2] - fit[0]
+    val shapeHeight = fit[3] - fit[1]
+    if (shapeWidth <= 0f || shapeHeight <= 0f) return
+    val scale = min(size.width / shapeWidth, size.height / shapeHeight)
     val fitted = Path().apply { addPath(path) }
-    val matrix = Matrix().apply {
-        translate(-bounds.left, -bounds.top)
-        scale(size.width / bounds.width, size.height / bounds.height)
-    }
-    fitted.transform(matrix)
+    fitted.transform(
+        Matrix().apply {
+            translate(
+                size.width / (2f * scale) - (fit[0] + fit[2]) / 2f,
+                size.height / (2f * scale) - (fit[1] + fit[3]) / 2f,
+            )
+            scale(scale, scale)
+        },
+    )
     drawPath(path = fitted, brush = brush)
+}
+
+/** The union of [shapes]' bounds as `[minX, minY, maxX, maxY]`. */
+private fun unionBounds(shapes: List<RoundedPolygon>): FloatArray {
+    var minX = Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxX = -Float.MAX_VALUE
+    var maxY = -Float.MAX_VALUE
+    val bounds = FloatArray(4)
+    shapes.forEach { shape ->
+        shape.calculateBounds(bounds)
+        // Read the result as extremes rather than assuming its field order.
+        minX = min(minX, min(bounds[0], bounds[2]))
+        maxX = max(maxX, max(bounds[0], bounds[2]))
+        minY = min(minY, min(bounds[1], bounds[3]))
+        maxY = max(maxY, max(bounds[1], bounds[3]))
+    }
+    return floatArrayOf(minX, minY, maxX, maxY)
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.gradient(colors: List<Color>): Brush =
