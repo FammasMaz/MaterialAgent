@@ -226,10 +226,6 @@ internal fun SessionInfoSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val facts = remember(transcript, summary) { SessionFacts.from(transcript, summary) }
-    val window = remember(transcript.usage) { contextWindow(transcript.usage) }
-    val usage = transcript.usage
-    val context = LocalContext.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -248,81 +244,117 @@ internal fun SessionInfoSheet(
                 modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
             )
 
-            ContextCard(window = window, usage = usage)
-
-            SectionHeader("Model")
-            facts.model?.takeIf { it.isNotBlank() }
-                ?.let { MetaRow("Model", it, monospace = true) }
-                ?: MetaRow("Model", "Not reported yet")
-            facts.provider?.takeIf { it.isNotBlank() }?.let { MetaRow("Provider", it) }
-            facts.reasoningEffort?.takeIf { it.isNotBlank() }?.let { MetaRow("Reasoning effort", it) }
-            facts.serviceTier?.takeIf { it.isNotBlank() }?.let { MetaRow("Service tier", it) }
-            MetaRow("Fast tier", if (facts.fast) "On" else "Off")
-            facts.approvalMode?.takeIf { it.isNotBlank() }?.let { MetaRow("Approvals", it) }
-            facts.personality?.takeIf { it.isNotBlank() }?.let { MetaRow("Personality", it) }
-            if (facts.yolo) MetaRow("YOLO mode", "On — approvals are skipped")
-
-            SectionHeader("Session")
-            CopyRow("Runtime ID", facts.runtimeId, onCue, "Runtime session id")
-            CopyRow("Stored ID", facts.storedId, onCue, "Stored session id")
-            facts.source?.takeIf { it.isNotBlank() }?.let {
-                MetaRow("Started from", summary?.groupLabel ?: it)
-            }
-            facts.messageCount?.let { MetaRow("Messages", it.toString()) }
-            facts.startedAt?.let { MetaRow("Started", relativeTime(it)) }
-            facts.profile?.takeIf { it.isNotBlank() }?.let { MetaRow("Profile", it) }
-            facts.project?.takeIf { it.isNotBlank() }?.let { MetaRow("Project", it) }
-            CopyRow("Working directory", facts.cwd, onCue, "Working directory", monospace = true)
-            facts.branch?.takeIf { it.isNotBlank() }?.let { MetaRow("Branch", it, monospace = true) }
-            facts.terminalBackend?.takeIf { it.isNotBlank() }?.let { MetaRow("Terminal", it) }
-            if (summary == null) {
-                Text(
-                    text = "This session is open but not in the stored list yet — Hermes " +
-                        "only persists a conversation after its first turn. Source, message " +
-                        "count and start time appear once it is saved.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 6.dp),
-                )
-            }
-
-            SectionHeader("Capabilities")
-            MetaRow("Tools available", facts.toolCount.toString())
-            MetaRow("Skills available", facts.skillCount.toString())
-            facts.mcpServerCount?.let { MetaRow("MCP servers", it.toString()) }
-            if (facts.toolCount == 0 && facts.skillCount == 0) {
-                Text(
-                    text = "The server reports the tool and skill catalogue with " +
-                        "`session.info`, which arrives after the first turn.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 6.dp),
-                )
-            }
-
-            facts.version?.takeIf { it.isNotBlank() }?.let {
-                SectionHeader("Server")
-                MetaRow("Hermes version", it)
-            }
-
-            Spacer(Modifier.height(8.dp))
-            FilledTonalButton(
-                onClick = {
-                    val manager =
-                        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    manager.setPrimaryClip(ClipData.newPlainText("Conversation info", facts.toReport()))
-                    onCue(HapticCue.UI_ACTION)
-                },
-                shapes = ButtonDefaults.shapes(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Copy all details")
-            }
-
-            Spacer(Modifier.height(28.dp))
+            SessionInfoBody(
+                transcript = transcript,
+                summary = summary,
+                onCue = onCue,
+            )
         }
+    }
+}
+
+/**
+ * Everything the app knows about the open conversation, in one body.
+ *
+ * The sheet and the transcript's pull-to-reveal panel both render this, so a
+ * field can never appear on one surface and be missing from the other. It is
+ * deliberately chrome-free — no title, no sheet, no scroll container — because
+ * those are the only things the two surfaces are allowed to differ in.
+ *
+ * The field mapping lives in [SessionFacts.from], which is pure and tested
+ * off-device; this function only arranges it.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun SessionInfoBody(
+    transcript: ChatTranscript,
+    summary: SessionSummary?,
+    onCue: (HapticCue) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val facts = remember(transcript, summary) { SessionFacts.from(transcript, summary) }
+    val window = remember(transcript.usage) { contextWindow(transcript.usage) }
+    val usage = transcript.usage
+    val context = LocalContext.current
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ContextCard(window = window, usage = usage)
+
+        SectionHeader("Model")
+        facts.model?.takeIf { it.isNotBlank() }
+            ?.let { MetaRow("Model", it, monospace = true) }
+            ?: MetaRow("Model", "Not reported yet")
+        facts.provider?.takeIf { it.isNotBlank() }?.let { MetaRow("Provider", it) }
+        facts.reasoningEffort?.takeIf { it.isNotBlank() }?.let { MetaRow("Reasoning effort", it) }
+        facts.serviceTier?.takeIf { it.isNotBlank() }?.let { MetaRow("Service tier", it) }
+        MetaRow("Fast tier", if (facts.fast) "On" else "Off")
+        facts.approvalMode?.takeIf { it.isNotBlank() }?.let { MetaRow("Approvals", it) }
+        facts.personality?.takeIf { it.isNotBlank() }?.let { MetaRow("Personality", it) }
+        if (facts.yolo) MetaRow("YOLO mode", "On — approvals are skipped")
+
+        SectionHeader("Session")
+        CopyRow("Runtime ID", facts.runtimeId, onCue, "Runtime session id")
+        CopyRow("Stored ID", facts.storedId, onCue, "Stored session id")
+        facts.source?.takeIf { it.isNotBlank() }?.let {
+            MetaRow("Started from", summary?.groupLabel ?: it)
+        }
+        facts.messageCount?.let { MetaRow("Messages", it.toString()) }
+        facts.startedAt?.let { MetaRow("Started", relativeTime(it)) }
+        facts.profile?.takeIf { it.isNotBlank() }?.let { MetaRow("Profile", it) }
+        facts.project?.takeIf { it.isNotBlank() }?.let { MetaRow("Project", it) }
+        CopyRow("Working directory", facts.cwd, onCue, "Working directory", monospace = true)
+        facts.branch?.takeIf { it.isNotBlank() }?.let { MetaRow("Branch", it, monospace = true) }
+        facts.terminalBackend?.takeIf { it.isNotBlank() }?.let { MetaRow("Terminal", it) }
+        if (summary == null) {
+            Text(
+                text = "This session is open but not in the stored list yet — Hermes " +
+                    "only persists a conversation after its first turn. Source, message " +
+                    "count and start time appear once it is saved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp),
+            )
+        }
+
+        SectionHeader("Capabilities")
+        MetaRow("Tools available", facts.toolCount.toString())
+        MetaRow("Skills available", facts.skillCount.toString())
+        facts.mcpServerCount?.let { MetaRow("MCP servers", it.toString()) }
+        if (facts.toolCount == 0 && facts.skillCount == 0) {
+            Text(
+                text = "The server reports the tool and skill catalogue with " +
+                    "`session.info`, which arrives after the first turn.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp),
+            )
+        }
+
+        facts.version?.takeIf { it.isNotBlank() }?.let {
+            SectionHeader("Server")
+            MetaRow("Hermes version", it)
+        }
+
+        Spacer(Modifier.height(8.dp))
+        FilledTonalButton(
+            onClick = {
+                val manager =
+                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                manager.setPrimaryClip(ClipData.newPlainText("Conversation info", facts.toReport()))
+                onCue(HapticCue.UI_ACTION)
+            },
+            shapes = ButtonDefaults.shapes(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("Copy all details")
+        }
+
+        Spacer(Modifier.height(28.dp))
     }
 }
 
