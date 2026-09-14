@@ -1,7 +1,7 @@
 [versions]
 # Toolchain — pinned to the versions proven on this machine.
 kotlin = "2.3.0"
-agp = "8.7.3"
+agp = "8.13.2"
 
 # Android
 coreKtx = "1.15.0"
