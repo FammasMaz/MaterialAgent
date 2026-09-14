@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -221,7 +222,19 @@ fun EmptyState(
             Spacer(Modifier.height(4.dp))
             // `shapes`, not `shape`: the single-shape overload pins a static
             // outline, which is what made the app's buttons Material 2 on touch.
-            Button(onClick = onAction, shapes = ButtonDefaults.shapes()) { Text(actionLabel) }
+            //
+            // The L size (56dp) rather than the default 40dp: an empty state exists
+            // to offer exactly one way forward, so this is the screen's primary
+            // action and it has to read as larger than the secondary one under it —
+            // and larger than the 48dp icon buttons it sits among. The connect
+            // screen's own submit button already asked for this much; this is the
+            // same action arriving from a list, so it now matches instead of being
+            // a size smaller than its twin.
+            Button(
+                onClick = onAction,
+                shapes = ButtonDefaults.shapes(),
+                modifier = Modifier.heightIn(min = 56.dp),
+            ) { Text(actionLabel) }
         }
         if (secondaryActionLabel != null && onSecondaryAction != null) {
             TextButton(onClick = onSecondaryAction) { Text(secondaryActionLabel) }
