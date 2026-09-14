@@ -57,7 +57,7 @@ val LocalSendOnEnter = staticCompositionLocalOf { false }
 @Composable
 fun MaterialAgentTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    palette: PaletteMode = PaletteMode.HERMES,
+    palette: PaletteMode = PaletteMode.DYNAMIC,
     motionLevel: MotionLevel = MotionLevel.FULL,
     hapticLevel: HapticLevel = HapticLevel.STANDARD,
     showReasoning: Boolean = true,
