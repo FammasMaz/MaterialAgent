@@ -38,6 +38,24 @@ enum class HapticCue {
     INTERRUPTED,
     SENT,
     SCROLL_TICK,
+
+    // The ten cues above were the whole vocabulary, and the UI had to reuse them
+    // for anything it wanted to buzz about. That produced nonsense: a successful
+    // delete fired TURN_FAILED, changing the haptics level fired TURN_COMPLETE,
+    // and opening a dialog fired TOOL_START. Four more exist so a tap means what
+    // it says, and so the turn cues keep meaning something on their own.
+
+    /** A direct manipulation with no other implication: a menu, sheet or dialog. */
+    UI_ACTION,
+
+    /** A switch, segment or filter flipped — not "sent". */
+    TOGGLE,
+
+    /** An irreversible action went through. Deliberately heavier than the rest. */
+    DESTRUCTIVE,
+
+    /** A pull-to-refresh gesture passed its threshold. */
+    REFRESH,
 }
 
 /**

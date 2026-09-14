@@ -132,6 +132,43 @@ data class SessionSummary(
 
     /** `cron` sessions are automations, not conversations the user started. */
     val isAutomation: Boolean get() = source == "cron" || id.startsWith("cron_")
+
+    /**
+     * The cron job that produced this run, if any.
+     *
+     * Hermes names a scheduled run `cron_<job>_<yyyymmdd>_<hhmmss>`, so one job
+     * leaves a trail of sessions that look identical in a list. The job id is the
+     * only thing that ties them together, and it is what lets the inbox fold
+     * forty runs into one row per automation.
+     */
+    val cronJobId: String?
+        get() {
+            if (!isAutomation) return null
+            val body = id.removePrefix("cron_")
+            // Trailing `_yyyyMMdd_HHmmss`; drop it and what remains is the job.
+            val stamp = Regex("_\\d{8}_\\d{6}$")
+            return stamp.find(body)?.let { body.substring(0, it.range.first) }?.ifBlank { null }
+        }
+
+    /** Which run this belongs to. Cron jobs group by job; everything else by source. */
+    val groupKey: String get() = cronJobId?.let { "cron:$it" } ?: "source:$source"
+
+    /**
+     * The name shown on a group header.
+     *
+     * A scheduled run's title is `<job name> · <when>`, so the job's own name is
+     * already in the row — better than the raw job id, which is a hash.
+     */
+    val groupLabel: String
+        get() = when {
+            isAutomation -> title.substringBefore(" · ").ifBlank { "Automation" }
+            source == "telegram" -> "Telegram"
+            source == "cli" -> "Terminal"
+            source == "desktop" -> "Desktop"
+            source == "tui" -> "Terminal"
+            source == "mobile" -> "This app"
+            else -> source.replaceFirstChar { it.uppercase() }
+        }
 }
 
 /** Live session runtime state, pushed as `session.info` after every turn. */

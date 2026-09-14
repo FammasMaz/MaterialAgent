@@ -67,6 +67,22 @@ class Haptics(context: Context) {
             // through a long transcript into a rattle.
             HapticCue.SCROLL_TICK -> effect(s * 0.22f, listOf(0L))
 
+            // A deliberate tap on a control that opens something. Heavier than a
+            // scroll tick (it is intentional) but lighter than a confirmation.
+            HapticCue.UI_ACTION -> effect(s * 0.38f, listOf(0L))
+
+            // Flipping a switch or a segment. Reads as a detent, not as "sent".
+            HapticCue.TOGGLE -> effect(s * 0.45f, listOf(0L))
+
+            // A refresh crossing its threshold: firm enough to confirm the
+            // gesture, under the level reserved for attention.
+            HapticCue.REFRESH -> effect(s * 0.55f, listOf(0L))
+
+            // Irreversible and gone. The heaviest pulse in the vocabulary on
+            // purpose — this is the one moment where a distinct thud earns its
+            // place, and it is why delete no longer fires TURN_FAILED.
+            HapticCue.DESTRUCTIVE -> effect(s * 0.9f, listOf(0L, 40L))
+
             HapticCue.TURN_START -> effect(s * 0.7f, listOf(0L))
 
             // A rising double-tap: work has begun on the user's behalf.
