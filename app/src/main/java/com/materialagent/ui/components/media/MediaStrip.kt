@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
@@ -28,7 +30,10 @@ import com.materialagent.ui.components.MetaPill
  * components needs a base URL to fetch from, and inventing one would produce
  * four identical failures in the transcript. Saying how many files arrived is
  * still better than dropping them silently — the prose above has already told
- * the reader that something was sent.
+ * the reader that something was sent. What it must *not* do is leave it at the
+ * bare count: a chip reading "1 attachment" under a turn whose audio is waiting
+ * on the server is the dead end this strip exists to remove, so the count is
+ * explained rather than left to look like a control that does nothing.
  */
 @Composable
 fun MediaStrip(
@@ -38,11 +43,20 @@ fun MediaStrip(
     if (media.isEmpty()) return
     val baseUrl = LocalMediaEnvironment.current?.baseUrl
     if (baseUrl.isNullOrBlank()) {
-        MetaPill(
-            text = if (media.size == 1) "1 attachment" else "${media.size} attachments",
+        Column(
             modifier = modifier,
-            icon = Icons.Rounded.AttachFile,
-        )
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MetaPill(
+                text = if (media.size == 1) "1 attachment" else "${media.size} attachments",
+                icon = Icons.Rounded.AttachFile,
+            )
+            Text(
+                text = "Not connected — these files are on the server.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         return
     }
 
