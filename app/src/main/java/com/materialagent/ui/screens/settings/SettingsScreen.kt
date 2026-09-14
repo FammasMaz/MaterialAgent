@@ -220,7 +220,7 @@ fun SettingsScreen(
                         ),
                         onSelect = { index ->
                             val level = HapticLevel.entries.getOrElse(index) { HapticLevel.STANDARD }
-                            cue(HapticCue.TURN_COMPLETE)
+                            cue(HapticCue.TOGGLE)
                             app.update { it.copy(hapticLevel = level) }
                         },
                     )
@@ -238,7 +238,7 @@ fun SettingsScreen(
                     subtitle = "Display the agent's thinking above its answer",
                     checked = settings.showReasoning,
                     onCheckedChange = { value ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         app.update { it.copy(showReasoning = value) }
                     },
                 )
@@ -249,7 +249,7 @@ fun SettingsScreen(
                     subtitle = "Every file read, command and search the agent runs",
                     checked = settings.showToolCalls,
                     onCheckedChange = { value ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         app.update { it.copy(showToolCalls = value) }
                     },
                 )
@@ -260,7 +260,7 @@ fun SettingsScreen(
                     subtitle = "A gentle tick while long answers stream in",
                     checked = settings.streamingHaptics,
                     onCheckedChange = { value ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         app.update { it.copy(streamingHaptics = value) }
                     },
                 )
@@ -271,7 +271,7 @@ fun SettingsScreen(
                     subtitle = "A tick under your finger as lists move",
                     checked = settings.scrollHaptics,
                     onCheckedChange = { value ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         app.update { it.copy(scrollHaptics = value) }
                     },
                 )
@@ -282,7 +282,7 @@ fun SettingsScreen(
                     subtitle = "Fold repeat runs of a cron job into one entry",
                     checked = settings.groupSessions,
                     onCheckedChange = { value ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         app.update { it.copy(groupSessions = value) }
                     },
                 )
@@ -293,7 +293,7 @@ fun SettingsScreen(
                     subtitle = "Off means Enter adds a line and the button sends",
                     checked = settings.sendOnEnter,
                     onCheckedChange = { value ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         app.update { it.copy(sendOnEnter = value) }
                     },
                 )
@@ -335,7 +335,7 @@ fun SettingsScreen(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            cue(HapticCue.SENT)
+                            cue(HapticCue.UI_ACTION)
                             onConnect()
                         },
                         shape = RoundedCornerShape(50),
@@ -420,18 +420,18 @@ fun SettingsScreen(
                 currentVersion = BuildConfig.VERSION_NAME,
                 autoCheck = settings.autoCheckUpdates,
                 onAutoCheckChange = { value ->
-                    cue(HapticCue.SENT)
+                    cue(HapticCue.TOGGLE)
                     app.update { it.copy(autoCheckUpdates = value) }
                 },
                 onCheck = {
-                    cue(HapticCue.SENT)
+                    cue(HapticCue.REFRESH)
                     app.checkForUpdates(force = true)
                 },
                 onDownload = { update -> app.downloadUpdate(update) },
                 onInstall = { app.installUpdate() },
                 onCancelDownload = { app.cancelUpdateDownload() },
                 onSkipVersion = {
-                    cue(HapticCue.TURN_COMPLETE)
+                    cue(HapticCue.UI_ACTION)
                     app.skipUpdateVersion()
                 },
             )

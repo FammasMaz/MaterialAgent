@@ -113,11 +113,11 @@ fun SessionsScreen(
             session = session,
             busy = busyId == session.id,
             onOpen = {
-                cue(HapticCue.SENT)
+                cue(HapticCue.UI_ACTION)
                 onOpenSession(session.id)
             },
             onRename = {
-                cue(HapticCue.TOOL_START)
+                cue(HapticCue.UI_ACTION)
                 renaming = session
             },
             onDelete = {
@@ -125,7 +125,7 @@ fun SessionsScreen(
                 deleting = session
             },
             onBranch = {
-                cue(HapticCue.TOOL_START)
+                cue(HapticCue.UI_ACTION)
                 viewModel.branch(session.id) { newId ->
                     onOpenSession(newId)
                 }
@@ -142,7 +142,7 @@ fun SessionsScreen(
             isRefreshing = refreshing,
             onRefresh = {
                 refreshing = true
-                cue(HapticCue.SENT)
+                cue(HapticCue.REFRESH)
                 viewModel.refresh()
             },
             modifier = Modifier.fillMaxSize(),
@@ -180,7 +180,7 @@ fun SessionsScreen(
                             options = SessionFilter.entries.map { it.label },
                             selectedIndex = SessionFilter.entries.indexOf(filter),
                             onSelect = { index ->
-                                cue(HapticCue.SENT)
+                                cue(HapticCue.TOGGLE)
                                 viewModel.filterBy(SessionFilter.entries[index])
                             },
                         )
@@ -229,7 +229,7 @@ fun SessionsScreen(
                             },
                             actionLabel = "New conversation",
                             onAction = {
-                                cue(HapticCue.TURN_START)
+                                cue(HapticCue.UI_ACTION)
                                 onNewConversation()
                             },
                             secondaryActionLabel = "Server settings",
@@ -255,7 +255,7 @@ fun SessionsScreen(
                                 is SessionListItem.GroupHeader -> SessionGroupHeaderRow(
                                     header = row,
                                     onToggle = {
-                                        cue(HapticCue.SENT)
+                                        cue(HapticCue.TOGGLE)
                                         viewModel.toggleGroup(row.groupKey)
                                     },
                                     modifier = Modifier.animateItem(
@@ -309,7 +309,7 @@ fun SessionsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    cue(HapticCue.TURN_FAILED)
+                    cue(HapticCue.DESTRUCTIVE)
                     viewModel.delete(session.id)
                     deleting = null
                 }) { Text("Delete") }
