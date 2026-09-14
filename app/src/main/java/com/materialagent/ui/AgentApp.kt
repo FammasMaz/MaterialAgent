@@ -119,7 +119,7 @@ fun AgentApp() {
                 composable(Routes.SESSIONS) {
                     SessionsScreen(
                         onOpenSession = { storedId -> nav.navigate(Routes.chat(storedId)) },
-                        onNewConversation = { nav.navigate(Routes.chat(null)) { launchSingleTop = true } },
+                        onNewConversation = { app.startNewConversation(); nav.navigate(Routes.chat(null)) { launchSingleTop = true } },
                         onConnect = { nav.navigate(Routes.CONNECT) },
                         app = app,
                     )
@@ -191,7 +191,7 @@ fun AgentApp() {
                             restoreState = true
                         }
                     },
-                    onNewConversation = { nav.navigate(Routes.chat(null)) { launchSingleTop = true } },
+                    onNewConversation = { app.startNewConversation(); nav.navigate(Routes.chat(null)) { launchSingleTop = true } },
                     onCue = cue,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)

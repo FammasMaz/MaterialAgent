@@ -166,6 +166,21 @@ class ChatController(
         streamTicks = 0
     }
 
+    /**
+     * Abandons the loaded conversation and starts from nothing.
+     *
+     * The transcript lives in this container-wide controller so that a live turn
+     * survives navigation — but that also means \"new conversation\" has to clear it
+     * explicitly. Without this the screen kept rendering the previous session and the
+     * next message was submitted to it, so the + button looked like it reopened the
+     * last chat. Hermes does not persist a session until its first turn completes, so
+     * an empty transcript is a valid fresh state: the first [submit] opens the session.
+     */
+    fun startNew() {
+        detach()
+        _transcript.value = ChatTranscript()
+    }
+
     private fun observe(sessionId: String) {
         eventJob?.cancel()
         eventJob = scope.launch {

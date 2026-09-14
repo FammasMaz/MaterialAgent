@@ -136,6 +136,9 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
 
     fun disconnect() = container.connection.deactivate()
 
+    /** Drop the open conversation so the next message starts a brand new one. */
+    fun startNewConversation() = container.chat.startNew()
+
     fun forget(profile: ServerProfile) {
         viewModelScope.launch {
             container.secrets.remove(profile.id)
