@@ -86,6 +86,7 @@ import com.materialagent.data.chat.TranscriptEntry
 import com.materialagent.ui.components.AgentOrb
 import com.materialagent.ui.components.CodeBlock
 import com.materialagent.ui.components.MarkdownText
+import com.materialagent.ui.components.StreamingText
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.PlainCodeBlock
 import com.materialagent.ui.theme.ExpressiveMotion
@@ -216,8 +217,9 @@ fun AssistantBlock(
         }
 
         if (entry.text.isNotBlank()) {
-            MarkdownText(
+            StreamingText(
                 text = entry.text,
+                streaming = entry.isStreaming,
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),

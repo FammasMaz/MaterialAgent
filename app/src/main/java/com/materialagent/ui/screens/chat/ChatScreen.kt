@@ -2,6 +2,8 @@ package com.materialagent.ui.screens.chat
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.scaleIn
@@ -270,17 +272,40 @@ fun ChatScreen(
                     ) {
                         entries.forEach { entry ->
                             item(key = entry.id) {
-                                TranscriptRow(
-                                    entry = entry,
-                                    showReasoning = showReasoning,
-                                    showTools = showTools,
-                                    onAnswer = { value, permanent ->
-                                        entry.interactive?.let { request ->
-                                            viewModel.answer(request, value, permanent)
-                                        }
-                                    },
-                                    onCue = cue,
-                                )
+                                Box(
+                                    modifier = Modifier.animateItem(
+                                        fadeInSpec = spring(
+                                            dampingRatio = 1f,
+                                            stiffness = Spring.StiffnessMediumLow,
+                                        ),
+                                        // A streaming row changes height on almost every
+                                        // frame; animating its placement fights the
+                                        // auto-scroll and reads as vertical jitter.
+                                        placementSpec = if (entry.isStreaming) {
+                                            null
+                                        } else {
+                                            spring(
+                                                dampingRatio = 1f,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            )
+                                        },
+                                        // Instant removal, so a regenerated turn never
+                                        // leaves a ghost of its old text behind.
+                                        fadeOutSpec = null,
+                                    ),
+                                ) {
+                                    TranscriptRow(
+                                        entry = entry,
+                                        showReasoning = showReasoning,
+                                        showTools = showTools,
+                                        onAnswer = { value, permanent ->
+                                            entry.interactive?.let { request ->
+                                                viewModel.answer(request, value, permanent)
+                                            }
+                                        },
+                                        onCue = cue,
+                                    )
+                                }
                             }
                         }
                         if (transcript.running) {

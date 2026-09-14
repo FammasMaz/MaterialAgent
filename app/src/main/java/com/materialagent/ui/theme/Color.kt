@@ -36,6 +36,23 @@ private val Light = lightColorScheme(
     tertiaryContainer = Color(0xFFFFDF9E),
     onTertiaryContainer = Color(0xFF261A00),
 
+    // M3 Expressive's "fixed" roles are tone-invariant: they keep their light
+    // values in dark mode so an accent can stay put while everything around it
+    // changes. `lightColorScheme` would otherwise leave them at the M3 baseline
+    // purple, which is not this app's indigo at all.
+    primaryFixed = Color(0xFFDFE0FF),
+    primaryFixedDim = Color(0xFFBAC3FF),
+    onPrimaryFixed = Color(0xFF070B47),
+    onPrimaryFixedVariant = Color(0xFF383E71),
+    secondaryFixed = Color(0xFFE1E0F9),
+    secondaryFixedDim = Color(0xFFC5C4DD),
+    onSecondaryFixed = Color(0xFF191A2C),
+    onSecondaryFixedVariant = Color(0xFF444559),
+    tertiaryFixed = Color(0xFFFFDF9E),
+    tertiaryFixedDim = Color(0xFFF5C24B),
+    onTertiaryFixed = Color(0xFF261A00),
+    onTertiaryFixedVariant = Color(0xFF5C4300),
+
     error = Color(0xFFBA1A1A),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFFDAD6),
@@ -80,6 +97,20 @@ private val Dark = darkColorScheme(
     onTertiary = Color(0xFF402D00),
     tertiaryContainer = Color(0xFF5C4300),
     onTertiaryContainer = Color(0xFFFFDF9E),
+
+    // Identical to the light scheme on purpose — see the note above.
+    primaryFixed = Color(0xFFDFE0FF),
+    primaryFixedDim = Color(0xFFBAC3FF),
+    onPrimaryFixed = Color(0xFF070B47),
+    onPrimaryFixedVariant = Color(0xFF383E71),
+    secondaryFixed = Color(0xFFE1E0F9),
+    secondaryFixedDim = Color(0xFFC5C4DD),
+    onSecondaryFixed = Color(0xFF191A2C),
+    onSecondaryFixedVariant = Color(0xFF444559),
+    tertiaryFixed = Color(0xFFFFDF9E),
+    tertiaryFixedDim = Color(0xFFF5C24B),
+    onTertiaryFixed = Color(0xFF261A00),
+    onTertiaryFixedVariant = Color(0xFF5C4300),
 
     error = Color(0xFFFFB4AB),
     onError = Color(0xFF690005),
