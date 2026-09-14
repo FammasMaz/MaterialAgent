@@ -58,7 +58,7 @@ import com.materialagent.data.ConnectionStatus
 import com.materialagent.data.HapticCue
 import com.materialagent.ui.AgentViewModel
 import com.materialagent.ui.containerViewModel
-import com.materialagent.ui.components.AgentOrb
+import com.materialagent.ui.components.AgentArt
 import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
@@ -462,7 +462,7 @@ private fun SessionCard(
                     }
                 }
             } else {
-                AgentOrb(size = 38.dp, active = false)
+                AgentArt(size = 38.dp)
             }
 
             Spacer(Modifier.width(12.dp))

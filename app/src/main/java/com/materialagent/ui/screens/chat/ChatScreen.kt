@@ -94,7 +94,7 @@ import com.materialagent.data.describeAttachment
 import com.materialagent.data.chat.EntryKind
 import com.materialagent.data.chat.TranscriptEntry
 import com.materialagent.ui.AgentViewModel
-import com.materialagent.ui.components.AgentOrb
+import com.materialagent.ui.components.AgentArt
 import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
@@ -391,7 +391,7 @@ fun ChatScreen(
                                     ?: "What should we get done?",
                                 body = "Ask for something concrete. Your agent works in its own " +
                                     "workspace with its own tools — you will see each step as it runs.",
-                                orbSize = 88.dp,
+                                artSize = 88.dp,
                             )
                         }
                     }
@@ -714,7 +714,7 @@ private fun WorkingIndicator(elapsed: Double?) {
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AgentOrb(size = 28.dp, active = true)
+        AgentArt(size = 28.dp, active = true)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(

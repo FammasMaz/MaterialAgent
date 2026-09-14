@@ -193,7 +193,7 @@ fun EmptyState(
     title: String,
     body: String,
     modifier: Modifier = Modifier,
-    orbSize: androidx.compose.ui.unit.Dp = 72.dp,
+    artSize: androidx.compose.ui.unit.Dp = 72.dp,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
     secondaryActionLabel: String? = null,
@@ -206,7 +206,7 @@ fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        AgentOrb(size = orbSize)
+        AgentArt(size = artSize, active = true)
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,

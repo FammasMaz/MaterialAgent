@@ -91,7 +91,7 @@ import com.materialagent.core.model.AttachmentRefs
 import com.materialagent.core.model.OutgoingAttachment
 import com.materialagent.data.chat.ToolInfo
 import com.materialagent.data.chat.TranscriptEntry
-import com.materialagent.ui.components.AgentOrb
+import com.materialagent.ui.components.AgentArt
 import com.materialagent.ui.components.CodeBlock
 import com.materialagent.ui.components.MarkdownText
 import com.materialagent.ui.components.StreamingText
@@ -221,7 +221,7 @@ fun AssistantBlock(
         if (entry.isStreaming || entry.statusLine.isNotBlank() || entry.interim) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (entry.isStreaming) {
-                    AgentOrb(size = 22.dp, active = true)
+                    AgentArt(size = 22.dp, active = true)
                     Spacer(Modifier.width(10.dp))
                 }
                 if (entry.statusLine.isNotBlank()) {

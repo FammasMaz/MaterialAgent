@@ -66,7 +66,7 @@ import com.materialagent.data.update.AppUpdate
 import com.materialagent.data.update.UpdateState
 import com.materialagent.ui.AgentViewModel
 import com.materialagent.ui.components.ExpressiveToggleGroup
-import com.materialagent.ui.components.AgentMark
+import com.materialagent.ui.components.AgentArt
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.components.scrollHaptics
@@ -349,7 +349,7 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AgentMark(size = 52.dp, sheen = true, gradient = true)
+                    AgentArt(size = 52.dp, sheen = true)
                     Spacer(Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("MaterialAgent", style = MaterialTheme.typography.titleMedium)

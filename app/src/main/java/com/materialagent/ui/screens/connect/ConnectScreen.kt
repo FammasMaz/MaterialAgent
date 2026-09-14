@@ -66,7 +66,7 @@ import com.materialagent.data.ConnectionStatus
 import com.materialagent.data.HapticCue
 import com.materialagent.data.ServerProfile
 import com.materialagent.ui.AgentViewModel
-import com.materialagent.ui.components.AgentMark
+import com.materialagent.ui.components.AgentArt
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.MetaPill
@@ -191,7 +191,7 @@ fun ConnectScreen(
                         shape = AgentShapes.pill,
                     ),
             )
-            AgentMark(size = markSize, sheen = true, gradient = true, sweepAmount = 1f - collapse)
+            AgentArt(size = markSize, sheen = true, sheenAmount = 1f - collapse)
         }
 
         Spacer(Modifier.height(8.dp))
