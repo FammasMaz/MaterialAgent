@@ -3,11 +3,15 @@ package com.materialagent.live
 import com.materialagent.core.ConnectionState
 import com.materialagent.core.HermesClient
 import com.materialagent.core.HermesRpcException
+import com.materialagent.core.InteractionParams
 import com.materialagent.core.arr
+import com.materialagent.core.bool
 import com.materialagent.core.int
 import com.materialagent.core.obj
 import com.materialagent.core.objOrNull
 import com.materialagent.core.str
+import com.materialagent.core.strAny
+import com.materialagent.core.strOrNull
 import com.materialagent.core.model.GatewayEvent
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.core.model.SessionSummary
@@ -100,6 +104,270 @@ class HermesLiveTest {
             println("──────── hermes live run ────────")
             print(transcript)
             println("─────────────────────────────────")
+        }
+    }
+
+    /**
+     * An approval round trip, using the app's own request body.
+     *
+     * The gateway reads a different parameter per interaction method and falls
+     * back to a default when the key it wants is absent: `approval.respond`
+     * defaults to `"deny"`. The app used to send a shared `"response"` field, so
+     * an approval reached the server, matched nothing, and quietly resolved as a
+     * denial — while the card on screen offered buttons that looked like they
+     * worked. This drives [InteractionParams.approval] itself, so the shapes the
+     * app puts on the wire are the ones under test.
+     *
+     * A Tier-2 dangerous shell pattern is what raises the gate: `rm -rf` on a
+     * throwaway path. The command appends a marker so a granted approval is
+     * provable from the assistant's own answer rather than inferred.
+     */
+    @Test(timeout = 420_000)
+    fun approvalResponseUsesTheServersParameterNames() {
+        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        assumeTrue(
+            "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
+            gatewayReachable(wsUrl),
+        )
+
+        val http = OkHttpClient.Builder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(http, scope)
+        val events = CopyOnWriteArrayList<GatewayEvent>()
+        val collectorScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        collectorScope.launch { client.events.collect { events.add(it) } }
+        val transcript = StringBuilder()
+        fun note(line: String) {
+            transcript.appendLine(line)
+        }
+
+        var runtime: String? = null
+        var stored: String? = null
+        try {
+            runBlocking {
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+
+                val created = client.request(
+                    "session.create",
+                    buildJsonObject {
+                        put("source", JsonPrimitive("mobile"))
+                        put("title", JsonPrimitive("MaterialAgent approval test"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                runtime = created.str("session_id").orEmpty()
+                stored = created.str("stored_session_id").orEmpty()
+                assertTrue("approval test needs a runtime id", runtime.orEmpty().isNotBlank())
+
+                // The rm trips the danger gate; the echo proves the command body
+                // actually ran once the approval is granted.
+                val marker = "MATERIALAGENT_APPROVAL_OK"
+                val command = "rm -rf /tmp/materialagent-approval-probe && echo $marker"
+                client.request(
+                    "prompt.submit",
+                    buildJsonObject {
+                        put("session_id", JsonPrimitive(runtime))
+                        put("text", JsonPrimitive(
+                            "Use the terminal tool to run exactly this one command: " +
+                                "$command\\nThen reply with the command's raw output.",
+                        ))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("submitted  $command")
+
+                waitUntil(APPROVAL_WAIT_MS) {
+                    events.any { it.type == GatewayEvent.APPROVAL_REQUEST && it.sessionId == runtime }
+                }
+                val approval = events.firstOrNull {
+                    it.type == GatewayEvent.APPROVAL_REQUEST && it.sessionId == runtime
+                }
+                assertNotNull(
+                    "the gateway must raise an approval for a Tier-2 dangerous command; " +
+                        "event types seen: " + events.map { it.type }.distinct(),
+                    approval,
+                )
+                val payload = approval!!.payload
+                val requestId = approval.requestId
+                assertNotNull("an approval carries the request_id to answer", requestId)
+                val choices = payload.arr("choices")?.mapNotNull { it.strOrNull() }.orEmpty()
+                note("approval   reason=${payload.str("description")} choices=$choices")
+                assertTrue(
+                    "the approval must offer the server's own vocabulary, saw $choices",
+                    choices.contains("once"),
+                )
+
+                // Exactly what the app sends when the user taps Allow once.
+                val responded = client.request(
+                    "approval.respond",
+                    InteractionParams.approval(runtime.orEmpty(), requestId.orEmpty(), "once"),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("responded  ${responded.toString().take(160)}")
+                // The gateway answers `resolved` as 1 (not `true`), and it
+                // reports success even for a request whose `choice` it ignored —
+                // it would simply have defaulted to "deny". The marker below is
+                // what proves the granted choice was the one it acted on.
+                val resolved = responded.int("resolved") ?: if (responded.bool("resolved") == true) 1 else 0
+                assertEquals(
+                    "the approval must resolve — a parameter name the server does not read resolves nothing",
+                    1,
+                    resolved,
+                )
+
+                waitUntil(TURN_TIMEOUT_MS) {
+                    events.any {
+                        it.type == GatewayEvent.MESSAGE_COMPLETE &&
+                            it.sessionId == runtime &&
+                            (it.payload.strAny("text", "content") ?: "").contains(marker)
+                    }
+                }
+                val completion = events.firstOrNull {
+                    it.type == GatewayEvent.MESSAGE_COMPLETE && it.sessionId == runtime
+                }
+                val answer = completion?.payload?.strAny("text", "content").orEmpty()
+                note("answer     ${answer.take(200).replace('\n', ' ')}")
+                assertTrue(
+                    "a granted approval must let the command run (no marker in: ${answer.take(160)})",
+                    answer.contains(marker),
+                )
+            }
+        } finally {
+            // Reuses the same cleanup the other live tests use, so a failed
+            // approval attempt still leaves no session behind.
+            runBlocking { runCatching { cleanup(client, runtime, stored, ::note) } }
+            client.disconnect()
+            collectorScope.cancel()
+            scope.cancel()
+            println("──────── hermes approval run ────────")
+            print(transcript)
+            println("─────────────────────────────────────")
+        }
+    }
+
+    /**
+     * A runtime id survives a reconnect, so the app's retry can keep using it.
+     *
+     * Worth pinning because the alternative would be silent breakage: if a
+     * dropped socket invalidated the runtime id, every session-scoped call
+     * (submit, steer, interrupt, approve, model switch) would start failing with
+     * "session not found" the moment the network hiccuped, and the app would have
+     * to re-resume before each one. Measured: the id is stable, `session.resume`
+     * hands back the same one, and a turn submitted on it after a hard socket
+     * drop is accepted.
+     */
+    @Test(timeout = 420_000)
+    fun runtimeIdSurvivesASocketDrop() {
+        val wsUrl = System.getenv("HERMES_TEST_WS")?.takeIf { it.isNotBlank() } ?: DEFAULT_WS_URL
+        assumeTrue(
+            "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
+            gatewayReachable(wsUrl),
+        )
+
+        val http = OkHttpClient.Builder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(http, scope)
+        val transcript = StringBuilder()
+        fun note(line: String) {
+            transcript.appendLine(line)
+        }
+
+        var runtime: String? = null
+        var stored: String? = null
+        try {
+            runBlocking {
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+                val created = client.request(
+                    "session.create",
+                    buildJsonObject {
+                        put("source", JsonPrimitive("mobile"))
+                        put("title", JsonPrimitive("MaterialAgent reconnect test"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                runtime = created.str("session_id").orEmpty()
+                stored = created.str("stored_session_id").orEmpty()
+                assertTrue("needs a runtime id", runtime.orEmpty().isNotBlank())
+
+                // A completed turn makes the session durable.
+                val events = CopyOnWriteArrayList<GatewayEvent>()
+                val collectorScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                collectorScope.launch { client.events.collect { events.add(it) } }
+                try {
+                    client.request(
+                        "prompt.submit",
+                        buildJsonObject {
+                            put("session_id", JsonPrimitive(runtime))
+                            put("text", JsonPrimitive("Say PING and nothing else."))
+                        },
+                        timeoutMs = REQUEST_TIMEOUT_MS,
+                    )
+                    waitUntil(TURN_TIMEOUT_MS) {
+                        events.any { it.type == GatewayEvent.MESSAGE_COMPLETE && it.sessionId == runtime }
+                    }
+                    note("turn 1     ok")
+                } finally {
+                    collectorScope.cancel()
+                }
+
+                // Hard drop, then a fresh connect — what the app does when a
+                // mobile network blinks.
+                client.disconnect("test drop")
+                delay(2_000)
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+                note("reconnect  ok")
+
+                val afterEvents = CopyOnWriteArrayList<GatewayEvent>()
+                val afterScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                afterScope.launch { client.events.collect { afterEvents.add(it) } }
+                try {
+                    // The transcript would still be holding the pre-reconnect id.
+                    client.request(
+                        "prompt.submit",
+                        buildJsonObject {
+                            put("session_id", JsonPrimitive(runtime))
+                            put("text", JsonPrimitive("Say PONG and nothing else."))
+                        },
+                        timeoutMs = REQUEST_TIMEOUT_MS,
+                    )
+                    waitUntil(TURN_TIMEOUT_MS) {
+                        afterEvents.any { it.type == GatewayEvent.MESSAGE_COMPLETE && it.sessionId == runtime }
+                    }
+                    note("turn 2     accepted on the same runtime id")
+
+                    val resumed = client.request(
+                        "session.resume",
+                        buildJsonObject { put("session_id", JsonPrimitive(stored)) },
+                        timeoutMs = REQUEST_TIMEOUT_MS,
+                    )
+                    note("resume     runtime=${resumed.str("session_id")}")
+                    assertEquals(
+                        "resume must hand back the same runtime id, not a new one",
+                        runtime,
+                        resumed.str("session_id"),
+                    )
+                } finally {
+                    afterScope.cancel()
+                }
+            }
+        } finally {
+            runBlocking { runCatching { cleanup(client, runtime, stored, ::note) } }
+            client.disconnect()
+            scope.cancel()
+            println("──────── hermes reconnect run ────────")
+            print(transcript)
+            println("──────────────────────────────────────")
         }
     }
 
@@ -573,6 +841,9 @@ class HermesLiveTest {
 
         /** A real turn can take minutes; the budget is generous on purpose. */
         const val TURN_TIMEOUT_MS = 120_000L
+
+        /** A dangerous command has to reach the gate, which means a model round trip first. */
+        const val APPROVAL_WAIT_MS = 150_000L
         const val LIST_TIMEOUT_MS = 45_000L
         const val PROGRESS_EVERY_MS = 15_000L
         const val PROBE_TIMEOUT_MS = 2_000L
