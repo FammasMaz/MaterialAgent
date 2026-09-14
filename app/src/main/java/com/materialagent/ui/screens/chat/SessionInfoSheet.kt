@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Done
-import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -26,7 +24,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -47,7 +44,6 @@ import com.materialagent.core.model.SessionSummary
 import com.materialagent.core.model.Usage
 import com.materialagent.data.HapticCue
 import com.materialagent.data.chat.ChatTranscript
-import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.screens.sessions.relativeTime
 import com.materialagent.ui.theme.CodeTextStyle
@@ -73,7 +69,6 @@ import kotlin.math.roundToInt
 internal data class ContextWindow(
     val used: Long,
     val max: Long,
-    val remaining: Long,
     val fraction: Float,
     val percent: Int,
 )
@@ -94,7 +89,6 @@ internal fun contextWindow(usage: Usage?): ContextWindow? {
     return ContextWindow(
         used = used,
         max = usage.contextMax,
-        remaining = (usage.contextMax - used).coerceAtLeast(0L),
         fraction = fraction,
         percent = (fraction * 100f).roundToInt(),
     )
@@ -134,7 +128,8 @@ internal data class SessionFacts(
     val provider: String?,
     val reasoningEffort: String?,
     val serviceTier: String?,
-    val fast: Boolean,
+    /** Null when the server never mentioned a fast tier, so "Off" is never claimed. */
+    val fast: Boolean?,
     val yolo: Boolean,
     val approvalMode: String?,
     val personality: String?,
@@ -146,8 +141,9 @@ internal data class SessionFacts(
     val source: String?,
     val messageCount: Int?,
     val startedAt: Double?,
-    val toolCount: Int,
-    val skillCount: Int,
+    /** Null until `session.info` reports a catalogue — an empty one is a real zero. */
+    val toolCount: Int?,
+    val skillCount: Int?,
     val mcpServerCount: Int?,
     val version: String?,
 ) {
@@ -162,7 +158,7 @@ internal data class SessionFacts(
                 provider = info?.provider,
                 reasoningEffort = info?.reasoningEffort,
                 serviceTier = info?.serviceTier,
-                fast = info?.fast == true,
+                fast = info?.fast,
                 yolo = info?.yolo == true,
                 approvalMode = info?.approvalMode,
                 personality = info?.personality,
@@ -174,14 +170,28 @@ internal data class SessionFacts(
                 source = summary?.source,
                 messageCount = summary?.messageCount,
                 startedAt = summary?.startedAt?.takeIf { it > 0.0 },
-                toolCount = info?.toolCount ?: 0,
-                skillCount = info?.skillCount ?: 0,
+                toolCount = info?.toolCount,
+                skillCount = info?.skillCount,
                 mcpServerCount = info?.mcpServers?.size,
                 version = info?.version,
             )
         }
     }
 }
+
+/**
+ * True when there is at least one session row to draw.
+ *
+ * The heading is part of the group, so it goes when the group does: a heading
+ * with nothing under it is the same empty container the reveal is meant not to
+ * have. A brand new conversation has no ids yet — the session does not exist
+ * until the first turn — so this is the common case, not an edge one.
+ */
+internal fun SessionFacts.hasSessionRows(): Boolean =
+    !runtimeId.isNullOrBlank() || !storedId.isNullOrBlank() || !source.isNullOrBlank() ||
+        messageCount != null || startedAt != null || !profile.isNullOrBlank() ||
+        !project.isNullOrBlank() || !cwd.isNullOrBlank() || !branch.isNullOrBlank() ||
+        !terminalBackend.isNullOrBlank()
 
 /**
  * The whole card as plain text, for the copy button.
@@ -202,7 +212,7 @@ internal fun SessionFacts.toReport(): String = buildList {
     provider?.takeIf { it.isNotBlank() }?.let { add("Provider: $it") }
     reasoningEffort?.takeIf { it.isNotBlank() }?.let { add("Reasoning: $it") }
     serviceTier?.takeIf { it.isNotBlank() }?.let { add("Service tier: $it") }
-    if (fast) add("Fast tier: on")
+    if (fast != null) add("Fast tier: ${if (fast) "on" else "off"}")
     if (yolo) add("YOLO mode: on")
     approvalMode?.takeIf { it.isNotBlank() }?.let { add("Approvals: $it") }
     personality?.takeIf { it.isNotBlank() }?.let { add("Personality: $it") }
@@ -211,8 +221,8 @@ internal fun SessionFacts.toReport(): String = buildList {
     cwd?.takeIf { it.isNotBlank() }?.let { add("Working directory: $it") }
     branch?.takeIf { it.isNotBlank() }?.let { add("Branch: $it") }
     terminalBackend?.takeIf { it.isNotBlank() }?.let { add("Terminal: $it") }
-    if (toolCount > 0) add("Tools: $toolCount")
-    if (skillCount > 0) add("Skills: $skillCount")
+    toolCount?.let { add("Tools: $it") }
+    skillCount?.let { add("Skills: $it") }
     mcpServerCount?.let { add("MCP servers: $it") }
     version?.takeIf { it.isNotBlank() }?.let { add("Server version: $it") }
 }.joinToString("\n")
@@ -256,10 +266,18 @@ internal fun SessionInfoSheet(
 /**
  * Everything the app knows about the open conversation, in one body.
  *
- * The sheet and the transcript's pull-to-reveal panel both render this, so a
- * field can never appear on one surface and be missing from the other. It is
- * deliberately chrome-free — no title, no sheet, no scroll container — because
- * those are the only things the two surfaces are allowed to differ in.
+ * The sheet and the transcript's pull-to-reveal header both render this, so a
+ * field can never appear on one surface and be missing from the other, and the
+ * wording can never drift between them. It is deliberately chrome-free — no
+ * title, no sheet, no card, no scroll container — because the two surfaces are
+ * only allowed to differ in their chrome.
+ *
+ * A row is drawn only when the server reported it. Hermes leaves most of this
+ * out until a turn has completed, and an absent field is better left unsaid than
+ * filled with a plausible-looking default: "Fast tier: off" on a session that
+ * never mentioned a fast tier is a claim the app cannot make. Nothing here
+ * explains the protocol, either; what a user cannot see is not their problem to
+ * read about.
  *
  * The field mapping lives in [SessionFacts.from], which is pure and tested
  * off-device; this function only arranges it.
@@ -281,56 +299,43 @@ internal fun SessionInfoBody(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        ContextCard(window = window, usage = usage)
+        ContextBlock(window = window, usage = usage)
 
-        SectionHeader("Model")
-        facts.model?.takeIf { it.isNotBlank() }
-            ?.let { MetaRow("Model", it, monospace = true) }
-            ?: MetaRow("Model", "Not reported yet")
+        // No heading over the model rows: they label themselves, and a "Model"
+        // heading above a "Model" row says the same word twice.
+        facts.model?.takeIf { it.isNotBlank() }?.let { MetaRow("Model", it, monospace = true) }
         facts.provider?.takeIf { it.isNotBlank() }?.let { MetaRow("Provider", it) }
         facts.reasoningEffort?.takeIf { it.isNotBlank() }?.let { MetaRow("Reasoning effort", it) }
         facts.serviceTier?.takeIf { it.isNotBlank() }?.let { MetaRow("Service tier", it) }
-        MetaRow("Fast tier", if (facts.fast) "On" else "Off")
+        facts.fast?.let { MetaRow("Fast tier", if (it) "On" else "Off") }
         facts.approvalMode?.takeIf { it.isNotBlank() }?.let { MetaRow("Approvals", it) }
         facts.personality?.takeIf { it.isNotBlank() }?.let { MetaRow("Personality", it) }
         if (facts.yolo) MetaRow("YOLO mode", "On — approvals are skipped")
 
-        SectionHeader("Session")
-        CopyRow("Runtime ID", facts.runtimeId, onCue, "Runtime session id")
-        CopyRow("Stored ID", facts.storedId, onCue, "Stored session id")
-        facts.source?.takeIf { it.isNotBlank() }?.let {
-            MetaRow("Started from", summary?.groupLabel ?: it)
-        }
-        facts.messageCount?.let { MetaRow("Messages", it.toString()) }
-        facts.startedAt?.let { MetaRow("Started", relativeTime(it)) }
-        facts.profile?.takeIf { it.isNotBlank() }?.let { MetaRow("Profile", it) }
-        facts.project?.takeIf { it.isNotBlank() }?.let { MetaRow("Project", it) }
-        CopyRow("Working directory", facts.cwd, onCue, "Working directory", monospace = true)
-        facts.branch?.takeIf { it.isNotBlank() }?.let { MetaRow("Branch", it, monospace = true) }
-        facts.terminalBackend?.takeIf { it.isNotBlank() }?.let { MetaRow("Terminal", it) }
-        if (summary == null) {
-            Text(
-                text = "This session is open but not in the stored list yet — Hermes " +
-                    "only persists a conversation after its first turn. Source, message " +
-                    "count and start time appear once it is saved.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 6.dp),
-            )
+        if (facts.hasSessionRows()) {
+            SectionHeader("Session")
+            CopyRow("Runtime ID", facts.runtimeId, onCue, "Runtime session id")
+            CopyRow("Stored ID", facts.storedId, onCue, "Stored session id")
+            facts.source?.takeIf { it.isNotBlank() }?.let {
+                MetaRow("Started from", summary?.groupLabel ?: it)
+            }
+            facts.messageCount?.let { MetaRow("Messages", it.toString()) }
+            facts.startedAt?.let { MetaRow("Started", relativeTime(it)) }
+            facts.profile?.takeIf { it.isNotBlank() }?.let { MetaRow("Profile", it) }
+            facts.project?.takeIf { it.isNotBlank() }?.let { MetaRow("Project", it) }
+            CopyRow("Working directory", facts.cwd, onCue, "Working directory", monospace = true)
+            facts.branch?.takeIf { it.isNotBlank() }?.let { MetaRow("Branch", it, monospace = true) }
+            facts.terminalBackend?.takeIf { it.isNotBlank() }?.let { MetaRow("Terminal", it) }
         }
 
-        SectionHeader("Capabilities")
-        MetaRow("Tools available", facts.toolCount.toString())
-        MetaRow("Skills available", facts.skillCount.toString())
-        facts.mcpServerCount?.let { MetaRow("MCP servers", it.toString()) }
-        if (facts.toolCount == 0 && facts.skillCount == 0) {
-            Text(
-                text = "The server reports the tool and skill catalogue with " +
-                    "`session.info`, which arrives after the first turn.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 6.dp),
-            )
+        val tools = facts.toolCount
+        val skills = facts.skillCount
+        val mcpServers = facts.mcpServerCount
+        if (tools != null || skills != null || mcpServers != null) {
+            SectionHeader("Capabilities")
+            tools?.let { MetaRow("Tools", it.toString()) }
+            skills?.let { MetaRow("Skills", it.toString()) }
+            mcpServers?.let { MetaRow("MCP servers", it.toString()) }
         }
 
         facts.version?.takeIf { it.isNotBlank() }?.let {
@@ -359,50 +364,31 @@ internal fun SessionInfoBody(
 }
 
 /**
- * The context window: the one number here that a user acts on, so it gets a real
- * indicator rather than a row of digits.
+ * Context usage, when there is a window to draw.
+ *
+ * A row and a bar rather than a card of its own. This sits on the same surface as
+ * the transcript, and a box inside the reveal would read as a second panel
+ * opening inside the first — the thing the reveal is meant not to be.
+ *
+ * When no window has been reported, the row says so in three words — or, if
+ * nothing has come back from a turn at all, says when to expect it. Either way
+ * it stays a row: a paragraph explaining which call delivers the window would be
+ * describing the protocol to someone who only wanted to know how full the
+ * context is, and a box around it was a panel inside the panel.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun ContextCard(window: ContextWindow?, usage: Usage?) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+private fun ContextBlock(window: ContextWindow?, usage: Usage?) {
+    when {
+        window != null -> Column(
+            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Rounded.Speed,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Context window",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f),
-                )
-                if (window != null) MetaPill(text = "${window.percent}% used")
-            }
-
-            if (window == null) {
-                Text(
-                    text = "No context window reported for this session yet. Hermes sends " +
-                        "it with `session.info`, which lands after the first turn — and the " +
-                        "`session.usage` call answers with token totals only, no window.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                return@Column
-            }
-
+            MetaRow(
+                label = "Context",
+                value = "${window.used.asTokens()} of ${window.max.asTokens()} · " +
+                    "${window.percent}% used",
+            )
             // A spatial change, so it animates on the placement spec: the bar may
             // settle into place rather than snap.
             val animated by animateFloatAsState(
@@ -414,34 +400,35 @@ private fun ContextCard(window: ContextWindow?, usage: Usage?) {
                 progress = { animated },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Stat("Used", window.used.asTokens(), Modifier.weight(1f))
-                Stat("Window", window.max.asTokens(), Modifier.weight(1f))
-                Stat("Free", window.remaining.asTokens(), Modifier.weight(1f))
-            }
-
-            if (usage != null) {
-                TokenBreakdown(usage)
-            }
+            usage?.let { TokenBreakdown(it) }
         }
+
+        // A window can be missing while the token totals are not: a resumed
+        // session reports its ledger but no limit.
+        usage != null && usage.hasReportedNumbers() -> {
+            SectionHeader("Usage")
+            TokenBreakdown(usage)
+        }
+
+        // No usage block has been seen at all, which on this gateway is what a
+        // session that has not finished a turn looks like.
+        usage == null -> MetaRow("Context", "Appears after the first turn")
+
+        else -> MetaRow("Context", "Not reported")
     }
 }
 
-/** One column of the three-up context readout. */
-@Composable
-private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(text = value, style = MaterialTheme.typography.titleMedium)
-    }
-}
+/**
+ * True when the server reported at least one usage figure worth a row.
+ *
+ * [TokenBreakdown] draws only the numbers that are not zero and only the rates
+ * it was given, so this mirrors it exactly — without it, a session whose usage
+ * block arrived empty would get a "Usage" heading and nothing under it.
+ */
+internal fun Usage.hasReportedNumbers(): Boolean =
+    input > 0 || output > 0 || reasoning > 0 || total > 0 || calls > 0 ||
+        compressions > 0 || activeSubagents > 0 || cacheHitPercent != null ||
+        (avgTps != null && avgTps > 0.0) || (avgLatencyS != null && avgLatencyS > 0.0)
 
 /**
  * The token ledger.

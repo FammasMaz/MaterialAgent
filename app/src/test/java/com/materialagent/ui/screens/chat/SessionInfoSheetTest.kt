@@ -99,11 +99,10 @@ class SessionInfoSheetTest {
     }
 
     @Test
-    fun aReportedWindowGivesUsedLimitFreeAndPercent() {
+    fun aReportedWindowGivesUsedAndPercent() {
         val window = contextWindow(usage(contextUsed = 50_000, contextMax = 200_000))!!
         assertEquals(50_000L, window.used)
         assertEquals(200_000L, window.max)
-        assertEquals(150_000L, window.remaining)
         assertEquals(25, window.percent)
         assertEquals(0.25f, window.fraction, 0.0001f)
     }
@@ -111,11 +110,57 @@ class SessionInfoSheetTest {
     @Test
     fun overfullContextClampsInsteadOfOverflowingTheBar() {
         // The server can report used > max mid-compression. An unclamped fraction
-        // would push the indicator past its track and the free figure negative.
+        // would push the indicator past its track and read as more than full.
         val window = contextWindow(usage(contextUsed = 260_000, contextMax = 200_000))!!
         assertEquals(1f, window.fraction, 0.0001f)
         assertEquals(100, window.percent)
-        assertEquals(0L, window.remaining)
+    }
+
+    @Test
+    fun anEmptyUsageBlockIsNotWorthAHeading() {
+        // Every figure the breakdown would draw is zero and no rate was sent, so
+        // there is nothing to show and nothing to head.
+        assertTrue(!usage().hasReportedNumbers())
+        assertTrue(!usage(contextUsed = 500, contextMax = 200_000).hasReportedNumbers())
+        assertTrue(usage(input = 1).hasReportedNumbers())
+        assertTrue(usage(total = 12_300).hasReportedNumbers())
+        assertTrue(usage(calls = 1).hasReportedNumbers())
+    }
+
+    @Test
+    fun aMissingFastTierIsNotAnOffFastTier() {
+        // "Off" is a claim about a session that never mentioned one, and this app
+        // does not get to make it up.
+        val unreported = SessionFacts.from(
+            ChatTranscript(sessionId = "ab12cd34"),
+            summary = null,
+        )
+        assertNull(unreported.fast)
+        assertNull(unreported.toolCount)
+        assertNull(unreported.skillCount)
+
+        val off = SessionFacts.from(
+            ChatTranscript(sessionId = "ab12cd34", info = info(fast = false)),
+            summary = null,
+        )
+        assertEquals(false, off.fast)
+        // An empty catalogue the server did send is a real zero, not a gap.
+        assertEquals(0, off.toolCount)
+    }
+
+    @Test
+    fun aHeadingGoesWhenItsWholeGroupIsMissing() {
+        // A brand new conversation has no ids at all — the session does not exist
+        // until the first turn — so the "Session" heading must not stand over an
+        // empty group.
+        val nothing = SessionFacts.from(ChatTranscript(), summary = null)
+        assertTrue(!nothing.hasSessionRows())
+
+        val started = SessionFacts.from(
+            ChatTranscript(sessionId = "ab12cd34"),
+            summary = null,
+        )
+        assertTrue(started.hasSessionRows())
     }
 
     @Test
