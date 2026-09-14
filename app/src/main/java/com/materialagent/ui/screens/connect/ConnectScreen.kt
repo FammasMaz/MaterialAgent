@@ -1,5 +1,6 @@
 package com.materialagent.ui.screens.connect
 
+import android.security.NetworkSecurityPolicy
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Verified
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -75,6 +77,7 @@ import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.colorSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
 import java.util.UUID
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * First-run setup, and the same screen later for adding or fixing a server.
@@ -120,6 +123,7 @@ fun ConnectScreen(
 
     val normalized = remember(address) { HermesUrl.normalize(address) }
     val addressValid = normalized != null
+    val cleartextWarning = remember(normalized) { cleartextWarningFor(normalized) }
     val canSubmit = addressValid && !connecting &&
         when (authMode) {
             AuthMode.TOKEN -> token.isNotBlank()
@@ -233,7 +237,7 @@ fun ConnectScreen(
                     value = address,
                     onValueChange = { address = it },
                     label = { Text("Address") },
-                    placeholder = { Text("192.168.1.27:9119") },
+                    placeholder = { Text("hermes.my-tailnet.ts.net:9119") },
                     singleLine = true,
                     isError = address.isNotBlank() && !addressValid,
                     supportingText = {
@@ -336,6 +340,23 @@ fun ConnectScreen(
                     )
                 }
 
+                cleartextWarning?.let { warning ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = warning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+
                 Button(
                     onClick = { submit() },
                     enabled = canSubmit,
@@ -385,6 +406,45 @@ fun ConnectScreen(
 
         Spacer(Modifier.height(40.dp))
     }
+}
+
+/**
+ * Hosts that are the device itself, so a cleartext request never leaves it.
+ *
+ * Not the same question as "is this host allowed cleartext" — that one is asked
+ * of the platform, below, because it is the platform that will refuse the socket.
+ */
+private val DEVICE_LOCAL_HOSTS = setOf("localhost", "127.0.0.1", "::1", "[::1]", "10.0.2.2", "10.0.3.2")
+
+/**
+ * What to say about [base] before the user types a credential into it, or null
+ * when the address looks like the one it is meant to be.
+ *
+ * The first case is a connection that cannot happen at all: the app allows
+ * cleartext to a named set of hosts and nothing else, and the refusal happens
+ * inside the socket, so without this the user would see a failure that says
+ * nothing about why. Asking [NetworkSecurityPolicy] — the same policy OkHttp
+ * asks before it opens a cleartext connection — keeps this exact rather than a
+ * second copy of res/xml/network_security_config.xml that could drift from it.
+ *
+ * The second case is the quieter one: the gateway is reachable, and everything
+ * sent to it, credential included, crosses the network unencrypted. That is what
+ * a tailnet or a tunnel is for, and it is worth knowing before a password goes
+ * over a network somebody else is on.
+ */
+private fun cleartextWarningFor(base: String?): String? {
+    val url = base?.toHttpUrlOrNull() ?: return null
+    if (url.isHttps) return null
+
+    if (!NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted(url.host)) {
+        return "Plain HTTP to ${url.host} is not allowed. Use an HTTPS address, a " +
+            "Tailscale or .local name, or an SSH tunnel to 127.0.0.1."
+    }
+    if (url.host.lowercase() in DEVICE_LOCAL_HOSTS) return null
+
+    return "Your password or token will cross the network unencrypted. That is fine " +
+        "inside a Tailscale tailnet or an SSH tunnel; on a network you do not control, " +
+        "use HTTPS."
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

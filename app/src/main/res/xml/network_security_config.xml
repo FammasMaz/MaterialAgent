@@ -1,15 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  A self-hosted Hermes gateway is reached over plain HTTP: on loopback through an
-  SSH tunnel, or at a LAN address like http://192.168.1.27:9119. The app cannot
-  know a user's host in advance, so cleartext is permitted app-wide rather than
-  allow-listed per domain, and certificates still come from the system store so
-  HTTPS servers are verified normally.
+  Cleartext HTTP is off by default.
+
+  A self-hosted gateway is reached over plain HTTP often enough that exceptions
+  are needed, but "any host, any port" was how a dashboard password typed into
+  the connect screen could be read off a shared LAN by anything listening. The
+  list below is the narrow version: the ways a gateway is reached without a
+  certificate, and nothing else.
+
+    - loopback, so `ssh -L` tunnel to `hermes serve` works;
+    - 10.0.2.2 / 10.0.3.2, the emulator's alias for the host machine;
+    - *.local, an mDNS name on the same network as the phone;
+    - *.ts.net, a Tailscale MagicDNS name, where the transport is already an
+      encrypted WireGuard tunnel before HTTP sees it.
+
+  Deliberately absent is every other address, including a bare LAN one like
+  192.168.1.27: that is exactly the case where a sign-in crosses a network
+  somebody else may be listening on. ConnectScreen says so before the attempt,
+  and offers the tunnel, the tailnet name, or HTTPS instead.
+
+  Two limits worth knowing. The configuration cannot express an IP range, so a
+  private address is covered only when it is reached by name — there is no CIDR
+  syntax to allow 192.168.0.0/16 wholesale. And IPv6 loopback is not listed:
+  the platform matches the bracketed spelling its own stacks ask with while
+  OkHttp asks with the bare address, so no single entry covers both. Use an
+  IPv4 tunnel address.
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <!-- The emulator's alias for the host machine's own loopback. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">10.0.3.2</domain>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- mDNS names, and Tailscale MagicDNS names. -->
+        <domain includeSubdomains="true">local</domain>
+        <domain includeSubdomains="true">ts.net</domain>
+    </domain-config>
 </network-security-config>

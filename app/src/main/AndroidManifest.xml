@@ -15,6 +15,12 @@
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+      Cleartext is governed by the network security config, not by the blanket
+      `usesCleartextTraffic` flag that used to sit here. That flag allowed plain
+      HTTP to any host the user typed, and the password sign-in goes out over
+      whatever scheme the address names.
+    -->
     <application
         android:name=".MaterialAgentApp"
         android:allowBackup="true"
@@ -26,7 +32,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MaterialAgent"
-        android:usesCleartextTraffic="true"
         tools:targetApi="36">
 
         <activity
