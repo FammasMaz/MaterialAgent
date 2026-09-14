@@ -31,6 +31,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +67,7 @@ import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.rememberCue
+import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalScrollHaptics
 import com.materialagent.ui.theme.placementSpec
@@ -405,7 +407,7 @@ private fun SearchField(
                 }
             }
         },
-        shape = RoundedCornerShape(50),
+        shape = AgentShapes.pill,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -446,7 +448,7 @@ private fun SessionCard(
         ) {
             if (session.isAutomation) {
                 Surface(
-                    shape = RoundedCornerShape(50),
+                    shape = AgentShapes.pill,
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.size(38.dp),
@@ -536,6 +538,7 @@ private fun SessionCard(
  * The chevron is a single arrow that rotates rather than two icons that swap,
  * so expanding and collapsing read as the same object turning over.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SessionGroupHeaderRow(
     header: SessionListItem.GroupHeader,
@@ -549,7 +552,7 @@ private fun SessionGroupHeaderRow(
     )
     Surface(
         onClick = onToggle,
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.largeIncreased,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = modifier.fillMaxWidth(),
     ) {
@@ -559,7 +562,7 @@ private fun SessionGroupHeaderRow(
         ) {
             if (header.isCron) {
                 Surface(
-                    shape = RoundedCornerShape(50),
+                    shape = AgentShapes.pill,
                     color = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.size(30.dp),

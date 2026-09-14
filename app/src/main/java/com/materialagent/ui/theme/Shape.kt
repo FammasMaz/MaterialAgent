@@ -62,16 +62,27 @@ object AgentShapes {
     val pill = RoundedCornerShape(50)
 
     /**
-     * The tray behind a fused [com.materialagent.ui.components.ExpressiveToggleGroup].
+     * A fused [com.materialagent.ui.components.ExpressiveToggleGroup]: the drawn
+     * height of one item, the inset the tray keeps around it, and the tray's own
+     * corner radius.
      *
-     * This one has to be a number rather than a scale step: M3E draws the shared
-     * outer corners of a connected button group with a *full* (50%) corner, so the
-     * tray has to be at least half the tray's height for the two arcs to sit
-     * concentrically. The group is ~48dp tall with its 4dp padding, which puts the
-     * floor at 24dp; 28dp clears it with margin, and changing it means re-checking
-     * that seam.
+     * These are one decision, so they are derived rather than each guessed. The end
+     * items of a connected group carry a *full* outer corner (`ButtonGroupDefaults`
+     * maps the group's outer edge to `CornerFull`, i.e. half the item's height), so
+     * a tray that insets them by [toggleTrayInset] is only concentric — equal arc,
+     * equal ring — at `itemHeight / 2 + inset`.
+     *
+     * [toggleItemHeight] is the *drawn* height, not merely a minimum. M3E's own
+     * `ToggleButton` draws a 40dp container inside a 48dp touch target, and an app
+     * that lays those untuned boxes out inside a tray gets 8dp of ring above and
+     * below but only 4dp at the sides, with no single radius able to match both —
+     * the ring then reads as thick at the corner and thin along the edge, which is a
+     * mistake rather than padding. Pinning the item to 48dp removes the mismatch, and
+     * 48dp is M3's minimum touch target anyway, so it costs nothing.
      */
-    val toggleTray: Dp = 28.dp
+    val toggleItemHeight: Dp = 48.dp
+    val toggleTrayInset: Dp = 4.dp
+    val toggleTray: Dp = toggleItemHeight / 2 + toggleTrayInset
 
     /**
      * The composer's radius, animated between these two: tight while a turn is

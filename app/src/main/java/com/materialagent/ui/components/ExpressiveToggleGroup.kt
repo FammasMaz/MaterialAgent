@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonGroupDefaults
@@ -46,6 +47,12 @@ import com.materialagent.ui.theme.AgentShapes
  * TalkBack announces the set correctly, a haptic *before* the selection changes,
  * and labels that never wrap (a longer option ellipsises rather than making the
  * row taller than the rest of the screen).
+ *
+ * The tray and the items are one geometry, not two guesses: every item is pinned to
+ * [AgentShapes.toggleItemHeight] and the tray's radius comes from
+ * [AgentShapes.toggleTray], which is that height's full corner plus the inset. See
+ * those two tokens for why a free-hand radius makes the ring thick at the corners
+ * and thin along the edges.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -54,16 +61,24 @@ fun ExpressiveToggleGroup(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    /** Rendered inside each button; receives the option's label. */
-    label: @Composable (String) -> Unit = { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+    /** Rendered inside each button; receives the option's label and its checked state. */
+    label: @Composable (String, Boolean) -> Unit = { text, checked ->
+        Text(
+            text = text,
+            // A selected segment is a selection state, which is what the emphasized
+            // voice is for; the rest of the row keeps the baseline label style.
+            style = if (checked) {
+                MaterialTheme.typography.labelLargeEmphasized
+            } else {
+                MaterialTheme.typography.labelLarge
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    },
     /** Container behind the fused buttons — the group's "tray". */
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
-    contentPadding: Dp = 4.dp,
-    // Defaulted to the tray token rather than a literal: M3E draws the shared outer
-    // corners of a connected group with a *full* (50%) corner, so the tray has to be
-    // at least half its own height or the two arcs stop being concentric. See
-    // `AgentShapes.toggleTray`.
-    cornerRadius: Dp = AgentShapes.toggleTray,
+    contentPadding: Dp = AgentShapes.toggleTrayInset,
     /**
      * `true` splits the width evenly between the options — right for two or
      * three short labels (Light/Dark/System), where a ragged edge would look
@@ -79,7 +94,7 @@ fun ExpressiveToggleGroup(
         modifier = modifier
             .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
             .then(if (fillWidth) Modifier else Modifier.horizontalScroll(scroll))
-            .clip(RoundedCornerShape(cornerRadius))
+            .clip(RoundedCornerShape(AgentShapes.toggleTray))
             .background(containerColor)
             .padding(contentPadding),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -101,7 +116,7 @@ fun ExpressiveToggleGroup(
                 onClick = {
                     if (index != selectedIndex) onSelect(index)
                 },
-            ) { label(option) }
+            ) { label(option, index == selectedIndex) }
         }
     }
 }
@@ -125,7 +140,14 @@ private fun RowScope.ToggleGroupItem(
         checked = checked,
         onCheckedChange = { onClick() },
         shapes = shapes,
-        modifier = size.semantics { role = Role.RadioButton },
+        // An explicit height, not just a minimum: without it `ToggleButton` draws
+        // M3E's 40dp container inside a 48dp touch target, and those 8dp of slack
+        // make the tray's ring 8dp top and bottom against 4dp at the sides — so no
+        // single tray radius can sit concentrically with both. Pinning the box to
+        // the height the tray is built around keeps the ring even on all four sides.
+        modifier = size
+            .height(AgentShapes.toggleItemHeight)
+            .semantics { role = Role.RadioButton },
     ) {
         content()
     }

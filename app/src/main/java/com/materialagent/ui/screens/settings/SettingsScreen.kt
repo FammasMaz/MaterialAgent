@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.ViewStream
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -75,7 +76,7 @@ import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalScrollHaptics
 
 /** Appearance, behaviour, server and about — the whole app's knobs. */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SettingsScreen(
     app: AgentViewModel,
@@ -338,7 +339,9 @@ fun SettingsScreen(
                             cue(HapticCue.UI_ACTION)
                             onConnect()
                         },
-                        shape = RoundedCornerShape(50),
+                        // `shapes`, not `shape`: this was pinning a 50% corner, which
+                        // selects the non-morphing overload and freezes the press morph.
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text("Add or switch") }
                     if (status is ConnectionStatus.Connected) {
                         Button(
@@ -346,7 +349,7 @@ fun SettingsScreen(
                                 cue(HapticCue.INTERRUPTED)
                                 app.disconnect()
                             },
-                            shape = RoundedCornerShape(50),
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text("Disconnect") }
                     }
                 }
@@ -439,6 +442,7 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ConnectionCard(
     status: ConnectionStatus,
@@ -510,7 +514,7 @@ private fun ConnectionCard(
 
                     ConnectionStatus.Idle -> Button(
                         onClick = onConnect,
-                        shape = RoundedCornerShape(50),
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text("Connect a server") }
 
                     else -> Unit
@@ -703,7 +707,7 @@ private fun UpdateCard(
                     when (state) {
                         is UpdateState.Available -> Button(
                             onClick = { onDownload(state.update) },
-                            shape = RoundedCornerShape(50),
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text("Update") }
 
                         is UpdateState.Downloading -> TextButton(onClick = onCancelDownload) {
@@ -712,7 +716,7 @@ private fun UpdateCard(
 
                         is UpdateState.ReadyToInstall -> Button(
                             onClick = onInstall,
-                            shape = RoundedCornerShape(50),
+                            shapes = ButtonDefaults.shapes(),
                         ) { Text("Install") }
 
                         else -> Unit
