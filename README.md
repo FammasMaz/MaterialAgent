@@ -1,202 +1,305 @@
 # MaterialAgent
 
-An Android client for a Hermes agent server, built with Jetpack Compose and Material 3
-Expressive.
+A Jetpack Compose, Material 3 Expressive Android client for a **Hermes** agent gateway.
+Point it at your own `hermes serve` instance and the whole agent loop is on your phone:
+streaming transcripts, reasoning and tool rows, approvals, steering mid-turn, media, and the
+server's model, toolset, skill and MCP catalogue.
 
-Point it at your own `hermes serve` instance and you get the whole agent loop on a phone:
-live streaming transcripts, reasoning and tool cards, approvals, model and reasoning-effort
-switching, steering mid-turn, and the server's model, toolset, skill and MCP catalogue.
+[![Build](https://github.com/FammasMaz/MaterialAgent/actions/workflows/build.yml/badge.svg)](https://github.com/FammasMaz/MaterialAgent/actions/workflows/build.yml)
 
-| Connect | Sessions | Conversation |
-| --- | --- | --- |
-| ![Connect](image.png) | ![Sessions](image.png) | ![Chat](image.png) |
-
-| Capabilities | Model picker | Dark |
-| --- | --- | --- |
-| ![Tools](image.png) | ![Models](image.png) | ![Dark](image.png) |
 
 ## What it does
+
+**The agent loop.** `ChatReducer` folds gateway events into a transcript: streamed text with a
+caret, reasoning blocks that stay collapsed until you open them, tool cards that show the command
+they ran and expand to arguments and result, todo lists, approvals and clarifying questions,
+compaction notes, interruptions, and elapsed-work feedback. Sending while a turn is running
+becomes steering instead of queueing, and the send button becomes a stop button.
 
 **Transport.** One WebSocket to `/api/ws`, newline-delimited JSON-RPC 2.0 in both directions,
 server pushes arriving as `event` notifications. `HermesClient` owns the socket: 15-second
 heartbeats, a 45-second silence deadline, per-session sequence watermarks, `replay_epoch`
-tracking, and `session.events.since` replay after a dropped connection. Credentials are either
-a loopback token or a single-use WebSocket ticket minted from the dashboard password, and
-`HermesConnection` owns that policy so no screen touches the socket directly.
+tracking, and `session.events.since` replay after a dropped connection.
 
-**The agent loop.** `ChatReducer` folds gateway events into a transcript: streamed text with a
-caret, reasoning blocks that stay collapsed until you ask, tool cards that show the command
-they ran and expand to arguments and result, todo lists, approvals and clarifying questions,
-compaction notes, interruptions, and elapsed-work feedback. Sending while a turn runs becomes
-steering instead of queueing, and the composer's send button becomes a stop button.
+**Everything the server advertises.** Models (the picker is search-first because a real server
+advertises four figures' worth), toolsets with per-connection toggles, skills, MCP servers, and
+live context-window and throughput usage.
 
-**Everything the server advertises.** Models (1485 on the reference server, so the picker is
-search-first), toolsets with per-toolset toggles, skills, MCP servers, and live context-window
-and throughput usage.
-
-**Scheduled work stays readable.** A cron job fires on a schedule and each firing stores its own
-session, so a handful of automations turns the inbox into a wall of near-identical rows named
+**Scheduled work stays readable.** Each cron firing stores its own session, so a handful of
+automations turns the inbox into a wall of near-identical rows named
 `cron_<job>_<date>_<time>`. Every run of one job folds under a single collapsible header instead,
-newest run first, on by default and switchable from Settings.
+newest first, on by default and switchable from Settings.
 
-## Material 3 Expressive
+**Interaction cards use the server's own vocabulary.** Approval buttons are rendered from
+`approval.request.choices` rather than hardcoded, clarify batches track `remaining` per `qid`,
+and sudo prompts read the password field `sudo.respond` actually wants.
 
-The design system is centralised rather than sprinkled: `Color.kt`, `Type.kt`, `Shape.kt`,
-`Motion.kt`, `Theme.kt`, plus a shared component kit (`Expressive.kt`, `Surfaces.kt`,
-`NavBar.kt`). Notable choices:
+**Media both ways.** Incoming: the agent writes `MEDIA:<path>` markers into its prose, the app
+strips them and fetches the file through three authenticated endpoints — `/api/media` (images),
+`/api/files/stream` (audio, HTTP Range, so seeking works), and `/api/files/download`. Outgoing:
+images go up as `image.attach_bytes`, everything else as `file.attach`, because the gateway has
+no HTTP upload endpoint a chat turn can use. The composer takes images from the system photo
+picker plus audio and file pickers, and all of them feed one sender.
 
-- **Motion** is split by purpose — overshooting springs for spatial changes, non-overshooting
-  effect springs for colour and alpha, and settled specs when the user asks for reduced motion.
-- **Haptics** are semantic (`HapticCue`) rather than raw amplitudes, so the same cue maps to
-  the right API level on any device, and the level is a user setting. The vocabulary
-  distinguishes a tap (`UI_ACTION`), a detent (`TOGGLE`), a refresh gesture, and a destructive
-  confirm, so the heaviest pulse is reserved for the moments that deserve it. Incoming text and
-  list scrolling have their own cues and their own switches.
-- **Branding** is a vector Hermes mark that carries a gradient as a hero and falls back to a
-  single gold accent at small sizes, because blending indigo into gold across a 40dp avatar
-  passes through khaki.
-- **Navigation** is a floating expressive toolbar plus a large action button rather than a
-  bottom bar.
+**Branching and search.** Any session branches into an independent one; the list is searchable
+and filterable, including by capability.
 
-## Build
+## Connect to a Hermes gateway
+
+The app talks to a `hermes serve` instance you run. Nothing is bundled or hosted.
+
+1. **Address** — `host:port` of the gateway, e.g. `192.168.1.27:9119` or
+   `http://example.<tailnet>.ts.net:9119`. A path may be included; the client appends `/api/ws`
+   to derive the socket URL.
+2. **Auth method** — `Access token` (loopback/dev tokens) or `Password`.
+3. **Credentials** — with `Password`, the app signs in with a **username** and the dashboard
+   password, keeps the session cookie, and exchanges it for a **single-use WebSocket ticket**.
+   It never puts the password on the socket.
+4. **Nickname** — optional label for saved connections.
+
+Auth is not optional on a reachable server: setting `dashboard.public_url` activates
+authentication even when Hermes binds to loopback, and Hermes refuses to start without a
+registered auth provider. There is no unauthenticated public-dashboard mode.
+
+**Remote access.** The reference setup exposes Hermes over Tailscale `serve`
+(tailnet-only, not Funnel), so a phone must be **signed in to the same tailnet** to reach it.
+Plain tailnet access is still not enough by itself: the dashboard's Host check accepts loopback
+or the single hostname in `dashboard.public_url`, so use the configured hostname rather than the
+raw tailnet IP. For local development the alternative is an SSH forward plus `adb reverse`
+(see below).
+
+While a connect is in flight the whole form is disabled, so taps and toggles look dead and the
+pixels do not change. That is a *connecting* app, not a frozen one — check with
+`uiautomator dump` rather than tapping, and do not press Back mid-connect (it cancels the job
+and leaves a "cancelled before it finished" banner that only Retry clears).
+
+## Build and run
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
-./gradlew :app:assembleDebug          # app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:testDebugUnitTest      # 61 JVM tests (the live ones skip themselves
-                                      # unless a gateway is listening)
+export ANDROID_HOME=/Users/user/Library/Android/sdk     # or wherever your SDK lives
+
+./gradlew :app:assembleDebug       # -> app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:testDebugUnitTest    # JVM suite; live tests skip without a gateway
 ```
 
-Minimum SDK 26, compile and target SDK 36, Kotlin 2.3.0, AGP 8.7.3, Compose BOM 2024.12.01,
-OkHttp 4.12.0, kotlinx-serialization 1.7.3.
-
-## Testing against a real server
-
-The JVM tests include live round trips that skip themselves unless a gateway is listening and
-credentials are set. Run a server on `home-server`, forward it, and point the tests at it:
+Install on a connected device or emulator:
 
 ```bash
-ssh -N -L 19119:127.0.0.1:9119 home-server &     # or scripts/tunnel.sh start
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
-# The dashboard password is never stored in this repository. Enabling authentication
-# retired the old loopback `?token=` path, so the tests sign in the way the app does:
-# they keep the sign-in cookie and exchange it for a single-use socket ticket.
-export HERMES_TEST_HTTP='http://127.0.0.1:19119'   # or the tailnet URL on a phone
-readonly HERMES_TEST_USER='<username>'
+The debug build carries the `.debug` application-id suffix, so it installs alongside a release
+build instead of replacing it. Two package names can therefore exist on one device:
+`com.materialagent.debug` (what `assembleDebug` installs) and `com.materialagent` (release).
+Sign in separately in each.
+
+### Toolchain
+
+| Component | Version |
+| --- | --- |
+| Kotlin | 2.3.0 |
+| Android Gradle Plugin | 8.13.2 |
+| Gradle / JDK | wrapper, JDK 17 |
+| Compose BOM | 2024.12.01 |
+| Material 3 (Expressive) | 1.5.0-alpha15 |
+| compileSdk / targetSdk / minSdk | 36 / 36 / 26 |
+| OkHttp | 4.12.0 |
+| kotlinx-serialization / coroutines | 1.7.3 / 1.9.0 |
+| Coil | 2.5.0 |
+| App version | 1.0.0-beta.8 (versionCode 10) |
+
+Release builds minify and shrink resources (`isMinifyEnabled` and `isShrinkResources` are both
+on), so a bug that only reproduces in release is worth checking with the same R8 rules.
+
+## Architecture
+
+```
+app/src/main/java/com/materialagent/
+  core/            # Android-free: transport, wire models, reducers
+    model/         #   Media markers, outgoing attachment contract
+  data/            # Connection policy, chat controller, update pipeline
+  ui/              # Compose: theme, components, screens, haptics
+  update/          # Release version comparison
+```
+
+- **`core/` has no Android dependencies.** The socket, the wire models and the transcript
+  reducer are plain Kotlin, so protocol behaviour is unit-testable without Compose or an
+  emulator. This is the single most useful structural decision in the repo.
+- **`HermesConnection` owns credential resolution, socket lifecycle, retry and reconnect
+  policy**, so no screen touches the socket. Blocking sign-in work is confined to
+  `Dispatchers.IO` there.
+- **`ChatController` lives in the container, not the screen**, so a live turn survives screen
+  recreation and navigation; `ChatViewModel` only owns view-local state such as the draft.
+- **Feature ViewModels are resolved from the shared `AppContainer`**, keeping dependency
+  construction at the application boundary instead of threading a container through nested
+  composables.
+- **One design system**: colour, type, shape, motion, haptics and the reusable surfaces live in
+  `ui/theme` and `ui/components`, so screens compose them rather than restating values.
+
+Two conventions that exist because the gateway makes them necessary:
+
+- `session.branch`, `session.history`, `prompt.submit`, `session.steer` and `session.interrupt`
+  take the *runtime* id; `session.title` and `session.delete` take the *stored* id. The API
+  surface separates these two namespaces rather than accepting an ambiguous nullable id, and
+  `ChatController.withLiveSession` retries once through `session.resume` when a call comes back
+  `4001` (or `4007`, which a reconnect can also cause).
+- Every interaction method reads a **different** parameter — `approval.respond` reads `choice`,
+  `clarify.respond` reads `answer`, `sudo.respond` reads `password` — and each falls back to a
+  default when its key is missing. The builders are kept together in `InteractionParams`, one per
+  method, precisely because the parameter shapes cannot be shared.
+
+## Testing
+
+```bash
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
+./gradlew :app:testDebugUnitTest
+```
+
+264 JVM test cases live in `app/src/test`, covering the wire protocol, the transcript reducer,
+media-marker parsing and URL building, the outgoing attachment contract, session grouping, model
+search, scroll-tick gating, the pull-reveal ratchet, effective palette, version comparison, and
+the update pipeline.
+
+### The cache trap
+
+`--rerun-tasks --no-build-cache` is **not optional** when you need evidence:
+
+```bash
+./gradlew :app:testDebugUnitTest --rerun-tasks --no-build-cache
+```
+
+The test environment is not a declared task input, so Gradle treats the test task as up to date
+after any earlier run — and worse, restores the previous results XML from its build cache. The
+suite then reports the last run's `skipped` results as if it had just executed, which is exactly
+what a passing run looks like. Only a forced run, with real per-test durations in
+`app/build/test-results/testDebugUnitTest/*.xml`, is evidence.
+
+### The live gateway suite
+
+`HermesLiveTest` holds the round trips. Each one calls `assumeTrue` on a configured gateway, so a
+clean checkout and CI both stay green and the live tests **skip** rather than fail.
+
+```bash
+scripts/tunnel.sh start        # idempotent SSH forward, waits for /api/health
+# or: ssh -N -L 19119:127.0.0.1:9119 home-server
+
+export HERMES_TEST_HTTP='http://127.0.0.1:19119'
+export HERMES_TEST_USER='<username>'
 export HERMES_TEST_PASSWORD="$(cat ~/MaterialAgent-release/dashboard-password.txt)"
 
 ./gradlew :app:testDebugUnitTest --tests '*HermesLiveTest*' --rerun-tasks --no-build-cache
 ```
 
-`--rerun-tasks --no-build-cache` is not optional. The environment is not a declared task input,
-so Gradle considers the test task up to date after any earlier run and — worse — restores the
-previous results XML from its build cache. The suite then reports the last run's `6 skipped`
-as if it had just executed, which is exactly what a passing run looks like. Only a forced run,
-with real per-test durations in the results, is evidence.
+Passwords and tokens live outside the repository; `.hermes-test-token` is git-ignored, and the
+tunnel script deliberately has no default token because a committed credential must be treated as public.
 
-Testing against a real gateway leaves conversations behind, so
-`scripts/session-cleanup.py` lists them and, with `--delete`, removes the ones this
-project's testing made. It matches an explicit allow-list of titles rather than a
-pattern: the server also holds real conversations, and a fuzzy match would delete
-them. A branch probe also leaves a 0-message stored session behind, which the
-script recognises. Deleting an open session answers `4023 cannot delete an active
-session`, so it resumes the stored id to get the runtime id, closes that, and then
-deletes.
-
-Without credentials the live tests skip rather than fail, so a clean checkout and CI both stay
-green.
-
-It connects, lists sessions, creates one, sends a turn, waits for `message.delta` and the
-authoritative `message.complete`, parses usage, confirms the session persisted, reads history
-rows, then closes and deletes it. Four live tests now run against a real server, each pinning a
-shape that is easy to get wrong:
-
-| Test | What it pins |
+| Live test | What it pins |
 |---|---|
-| `realGatewayTurnRoundTrip` | the whole turn lifecycle, plus the persisted-session and event-shape contracts |
-| `branchNeedsTheRuntimeSessionId` | `session.branch` rejects the stored id with `4001`, so a row has to resume first |
-| `approvalResponseUsesTheServersParameterNames` | a real Tier-2 approval: the card's payload, the `approval.respond` parameter names, and that a granted `once` actually runs the command |
+| `realGatewayTurnRoundTrip` | the whole turn lifecycle — `message.delta` through the authoritative `message.complete`, usage parsing, session persistence, history rows, close and delete |
+| `attachmentUploadRoundTrip` | the two attach RPCs and the `@file:` reference the client has to put back into the prompt |
+| `branchNeedsTheRuntimeSessionId` | `session.branch` rejects the stored id with `4001`, so a row must resume first |
+| `approvalResponseUsesTheServersParameterNames` | a real approval: the card's payload, the parameter names, and that a granted `once` actually ran the command |
+| `clarifyAnswersAreMatchedToTheirQuestion` | a two-question batch where each answer moves `remaining` from `[q1]` to `[]` and the agent's finished text contains both options |
 | `runtimeIdSurvivesASocketDrop` | a dropped socket does not invalidate the runtime id, so session-scoped calls stay valid after a reconnect |
+| `passwordLoginMintsAWorkingTicket` | password sign-in, cookie retention and ticket exchange against a real server |
 
-For the emulator, forward the same port and rebuild:
+Timeouts are generous (6–8 minutes) because these drive a real agent.
+
+Testing leaves conversations behind, so `scripts/session-cleanup.py` lists them and, with
+`--delete`, removes the ones this project's testing made. It matches an explicit allow-list of
+titles rather than a pattern: the same server holds real conversations and a fuzzy match would
+delete them.
+
+For the emulator, forward the gateway port and rebuild:
 
 ```bash
 adb reverse tcp:9119 tcp:19119
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Docs
+## Releases and the in-app updater
 
-- `docs/PROTOCOL.md` — the gateway protocol as verified against a live server, including the
-  behaviours that are not obvious from reading it (a session is not persisted until its first
-  turn completes; `gateway.ready` carries no version; unknown `session.create` params are
-  ignored silently).
-- `docs/PLAN.md` — product surfaces, the design-system plan, and the execution order.
+The app ships from **GitHub Releases and nowhere else**. `BuildConfig.EXTERNAL_UPDATES_ENABLED`
+turns the updater off in one place for any build that must not self-update.
 
-## Approvals
+- Checks are throttled to once per 24 hours, and manual checks can force past the throttle.
+- Release metadata is read from the GitHub API, filtered on the asset URL being a pinned release
+  host before a byte moves.
+- The APK is downloaded, **SHA-256 verified against the published digest**, and only then handed
+  to the system installer.
+- Prerelease-aware: GitHub's `/releases/latest` endpoint excludes prereleases, so the updater
+  cannot use it for a beta channel.
+- Update checks ignore `/releases/latest` ordering, compare versions, and let a user skip a
+  version.
+- Installing needs the "install unknown apps" grant; the app detects a missing grant and sends
+  you to the settings screen, resuming the install on return. `REQUEST_INSTALL_PACKAGES` is
+  declared in the manifest — without it `canRequestPackageInstalls()` throws.
+- **Updates require the same signing certificate.** A release signed with a fresh key cannot
+  update an existing installation; the beta and release channels are signed with a persistent
+  release keystore for this reason. The tag workflow falls back to debug signing when no keystore
+  secret is configured, and an APK signed that way will not install over a release-signed one.
 
-![An approval card waiting on a destructive command](image.png)
+`main` is the development branch, and every push and pull request to it runs
+`.github/workflows/build.yml` (JDK 17, Android SDK, `assembleDebug`, `testDebugUnitTest`;
+the live tests skip there because the repository carries no credential).
 
-A destructive shell command is the one place the agent stops and asks, and the card that asks has
-to be exactly right — the tool is blocked until it is answered. It was wrong in three ways at once:
+## Design system notes
 
-- The gateway names its allowed answers in the `approval.request` payload (`once`, `session`,
-  `always`, `deny`, with `always` simply absent when policy forbids it). The reducer dropped them,
-  so the card rendered as a bare text field with no way to approve.
-- Every interaction method reads a **different** parameter, and falls back to a default when the
-  key is missing — `approval.respond` reads `choice` and would otherwise resolve as `"deny"`,
-  `clarify.respond` reads `answer`, `sudo.respond` reads `password`, `secret.respond` reads
-  `value`. The app sent one shared `"response"` field, so approvals reached the server, matched
-  nothing, and quietly denied themselves while the buttons looked like they worked.
-- An unanswered approval is failed closed by the gateway (it timed out after 60s here and the
-  tool returned "blocked"). The card kept showing "Waiting" with live buttons afterwards, offering
-  an action that no longer existed.
+The design system is centralised rather than sprinkled: `ui/theme/{Color,Type,Shape,Motion,
+Theme}.kt` plus a shared component kit (`Expressive.kt`, `Surfaces.kt`, `NavBar.kt`).
 
-All three are fixed: the choices drive the buttons (`Allow once` / `Allow for this session` /
-`Always allow` / a quieter `Deny`, with the server's own token sent back), each method sends the
-parameters its server counterpart reads (`InteractionParams`), and a turn ending retires whatever
-is still unanswered. The whole path is verified rather than assumed — pressing **Allow once** in
-the emulator made `rm -rf /tmp/probe-dir` actually run (the directory was gone when checked on the
-server), and the denial path left it in place.
+- **Motion is split by purpose.** Overshooting springs for spatial change, non-overshooting
+  effect springs for colour and alpha, and settled specs when the user asks for reduced motion.
+  The helpers in `Motion.kt` are preference-aware, so reduced motion is honoured by construction
+  rather than by a flag check at each call site.
+- **Buttons use the M3E morphing overloads.** `shapes = ButtonDefaults.shapes()` and
+  `IconButtonDefaults.shapes()` — passing a `RoundedCornerShape` selects the non-morphing
+  overload and pins a static outline, which silently kills the press shape morph.
+- **Haptics are semantic, not amplitudes.** A `HapticCue` maps to the right API level for the
+  device, the intensity is a user setting, and the vocabulary distinguishes a tap, a detent, a
+  refresh gesture and a destructive confirm. Incoming text and scroll feedback have their own
+  cues and their own switches, and vibration effects are memoised and quantised so high-frequency
+  streaming ticks do not rebuild effects on the main thread.
+- **Scroll haptics come from nested-scroll input**, so programmatic streaming auto-scroll does
+  not machine-gun the motor at the user.
+- **Grouping uses one connected toggle tray** (`ButtonGroupDefaults` connected shapes,
+  `ConnectedSpaceBetween`) for session filters, enumerated preferences and capability tabs.
+- **Navigation is a floating expressive toolbar** plus a large action button rather than a bottom
+  bar. It is an intentional overlay: lists pass beneath it while scrolling, and bottom padding
+  keeps terminal content clear.
 
-## Clarifying questions
+## Protocol traps worth knowing
 
-![A two-question clarify card, then the same card fully answered both ways](image.png)
+Things that looked fine and were not, all verified against a live server. `docs/PROTOCOL.md` has
+the full list.
 
-When the agent needs a decision it asks through `clarify.request`, and the request carries
-`questions[]` — a batch, even for a single question. Each question answers on its own:
-
-- The card lists every question with **its own** choices, and stays up until the last one is
-  answered, because that is what releases the agent. Answered questions stay visible above the
-  unanswered ones, so a half-answered batch reads as half-answered.
-- The `qid` goes back as `question_id`. Without it the gateway takes a different internal path that
-  still answers `{"status":"ok"}` while the tool receives **nothing** — which is how a two-question
-  ask came back as *"the clarify tool returned no answer"* with the typed text sitting in the card
-  looking answered.
-- `clarify.respond` reports `remaining` after each answer, and the card is driven by it: the turn
-  only moves on when the list is empty. `status: "expired"` closes the card instead of claiming an
-  answer the agent never got.
-- A question that offers choices can only be answered with one of them; the tool strips a
-  `(Recommended)` decoration before the model sees the value, so the card shows the decorated label
-  and the agent receives the bare one.
-
-Both paths are verified against the real gateway: the agent's own reply to a two-question batch is
-`PostgreSQL Python`, and the live test asserts that each answer moves `remaining` from `[q1]` to
-`[]` and that the agent's finished text contains every option it was sent.
+| Trap | Consequence |
+|---|---|
+| A session is not persisted until its first turn completes | `session.list` omits it, and `session.delete` answers `4023 cannot delete an active session` while it is open |
+| `session.create` silently ignores unknown parameters | a renamed parameter fails with no error at all |
+| Every interaction method reads a different field, and defaults when it is missing | a shared `response` field matched nothing and re-read as `deny`; the buttons looked like they worked |
+| An unanswered approval is failed closed by the gateway (~60s) | the card kept offering buttons for an action that no longer existed, so a turn ending now retires unanswered requests |
+| `clarify.respond` needs `question_id` | without it the gateway answers `{"status":"ok"}` while the tool receives nothing |
+| `clarify.respond` returns `remaining` and can return `status: "expired"` | the tool is released only when `remaining` is empty; an expired request must be closed, not claimed as answered |
+| `session.branch` rejects the stored session id with `4001` | branching from a row has to resume first |
+| `session.close` invalidates the runtime handle | reusing it afterwards can answer `4007 session not found` |
+| Event sequence numbers are per-session and valid only inside the active `replay_epoch` | stale watermarks must be discarded when the epoch changes |
+| A resumed session replays `pending_approval` | an approval raised while the socket was down still arrives |
+| `gateway.ready` carries no version field | the client's `serverVersion` stays null for it |
+| `session.list` can lag a branch-snapshot flush | a just-created branch may not be visible yet |
 
 ## Verification
 
 What has been checked, and how — because "it builds" is not the same claim as "it works".
 
-**Transport and agent loop.** 62 JVM tests, no failures, four of which run against a live gateway
-through the tunnel to `home-server`: a full turn round trip (`message.delta` … authoritative
-`message.complete`), the branching contract including the rejected stored-id call, an approval
-round trip with the granted command proven to have run, and runtime-id stability across a socket
-drop.
+**Transport and the agent loop.** The JVM suite passes with no failures; the seven live tests run
+against a real gateway through the SSH tunnel, including a granted approval proven to have run
+its command and a clarify batch whose answers the agent echoed back.
 
 **Haptics, at the platform rather than the source.** The emulator's vibrator service keeps an
 aggregated history of the effects an app actually played, and `com.materialagent.debug` has
-entries that match the cue table primitive for primitive and amplitude for amplitude:
+entries matching the cue table primitive for primitive and amplitude for amplitude:
 
 ```
 Primitive=TICK(scale=0.80, delay=0ms)                                  -> SENT
@@ -212,42 +315,40 @@ Check it yourself while the app is doing something:
 adb shell dumpsys vibrator_manager | sed -n '/Aggregated vibration history/,$p'
 ```
 
-**Motion, from the frames rather than the code.** Screen-recorded a navigation, extracted the
-frames, and compared consecutive ones — a transition that is really animated shows a run of
-frames each differing slightly; a cut shows one spike among identical frames. The recorded
-frames show both screens blended at partial opacity for about ten frames (~400 ms) while the
-navigation pill's label grows between states, with the deltas decaying (0.25 → 0.04) as the
-spring settles. Frames outside the transition measure 0.00, so the measurement is picking up
-real change rather than encoder noise.
+**Motion, from the frames rather than the code.** A recorded navigation was decomposed into
+frames and consecutive frames compared: a real animation shows a run of frames each differing
+slightly, a cut shows one spike among identical frames. The frames show both screens blended at
+partial opacity for about ten frames (~400 ms) while the navigation pill's label grows between
+states, with deltas decaying (0.25 → 0.04) as the spring settles, and 0.00 outside the transition.
 
-## Known gaps
+**Approvals, end to end.** Pressing **Allow once** made `rm -rf /tmp/probe-dir` actually run
+(the directory was gone on the server), and the denial path left it in place.
 
-- The approval and clarify cards are both driven end to end against a real server — a granted
-  approval really ran its command, and a two-question clarify really delivered both answers
-  (`PostgreSQL Python`). Sudo and credential prompts are implemented and unit-tested against the
-  gateway's payload shapes, but reaching `sudo.request`/`secret.request` needs a host prompt, so
-  those two have not been driven live.
-- A clarify question that offers choices is answered from those choices. Free text is still sent
-  for a question without any, but the card does not offer a text field for a question that has
-  options, since the agent cannot use an unoffered value.
-- Haptics fire for real — the emulator exposes a vibrating device that supports `COMPOSE_EFFECTS`
-  and the `TICK`/`LOW_TICK` primitives, so the platform-level record is checkable. See
-  *Verification* below; what is *not* covered is how they actually feel, which needs a motor.
-- Screenshots above are from a 1080×1920 arm64 emulator running the debug build.
+## Limitations and verification gaps
 
-Branching is worth calling out because it looked fine and was not. `session.branch` identifies
-its source by the **runtime** id, and answers `4001 session not found` for the stored id that
-`session.list` shows and every other session method accepts — so branching from a row (which
-only knows the stored id) has to resume the session first, and a conversation that is already
-open has to branch by its runtime id. The screen also had to be told to re-open the new
-argument, because branching navigates to a sibling conversation at the same destination and the
-navigation is single-top, so the ViewModel is reused. Both paths are now exercised by hand
-*and* pinned by `HermesLiveTest.branchNeedsTheRuntimeSessionId`, which asserts the 4001 for the
-stored id so the extra round trip can't be "simplified" away.
+- **Sudo and credential prompts are not driven live.** They are implemented and unit-tested
+  against the gateway's payload shapes, but reaching `sudo.request`/`secret.request` needs a host
+  prompt that the test setup does not produce.
+- **A clarify question that offers choices can only be answered from those choices.** Free text
+  is still sent for a question without any, but the card does not offer a text field for a
+  question that has options, since the agent cannot use an unoffered value.
+- **Haptics are verified at the platform, not at the hand.** The emulator exposes a vibrating
+  device supporting `COMPOSE_EFFECTS` and the `TICK`/`LOW_TICK` primitives, so the recorded
+  effects are checkable; how they actually feel needs a motor.
+- **Screenshots are from one emulator and one gateway**, at one point in a fast-moving beta. They
+  show the debug build against the reference server, not every state the app can reach.
+- **No instrumented UI test suite.** There is no `app/src/androidTest` source set; UI behaviour
+  is verified by hand on the emulator, and the Compose-level logic that can be tested headlessly
+  (search, the pull ratchet, scroll gating, grouping, palette) is covered by JVM tests instead.
+- **This is a beta.** Version `1.0.0-beta.N`; the gateway protocol has moved under the client
+  more than once, and `docs/PROTOCOL.md` records what was true when.
 
-Session-scoped calls are guarded separately: `ChatController.withLiveSession` retries once through
-`session.resume` when a call answers `4001`, so a runtime id that has gone stale (one was observed
-after a reconnect plus relaunch) recovers instead of failing the turn. It is deliberately narrow —
-only `4001`, only one retry, and the original failure is returned if the resume does not help. A
-socket drop on its own does *not* invalidate the runtime id; `HermesLiveTest.runtimeIdSurvivesASocketDrop`
-pins that so the guard is not mistaken for the explanation.
+## Docs
+
+- [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the gateway protocol as verified against a live
+  server, including the behaviours that are not obvious from reading it.
+- [`docs/PLAN.md`](docs/PLAN.md) — product surfaces, the design-system plan, and the execution
+  order.
+- [`scripts/tunnel.sh`](scripts/tunnel.sh) — the SSH forward the live tests want.
+- [`scripts/session-cleanup.py`](scripts/session-cleanup.py) — removes the sessions testing left
+  behind, by allow-list.
