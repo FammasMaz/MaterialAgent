@@ -4,14 +4,52 @@
 Run with no arguments to just list. Pass --delete to remove sessions whose title
 matches a MaterialAgent test pattern; anything else is left alone.
 """
+import http.cookiejar
 import json
+import os
 import sys
+import urllib.parse
 import urllib.request
 import websocket  # type: ignore
 
-# The tunnel script owns the token file; the URL shape is fixed.
-TOKEN = open('.hermes-test-token').read().strip()
-WS = f'ws://127.0.0.1:19119/api/ws?token={TOKEN}'
+# Password sign-in only: enabling authentication retired the loopback `?token=`
+# path, so this walks the same three steps the app does — a sign-in cookie is
+# what mints the single-use socket ticket, and without one the socket answers 403.
+BASE = os.environ.get('HERMES_TEST_HTTP', 'http://127.0.0.1:19119').rstrip('/')
+USER = os.environ.get('HERMES_TEST_USER', '').strip()
+PASSWORD = os.environ.get('HERMES_TEST_PASSWORD', '')
+
+
+def _post(path, body=None, opener=None):
+    data = json.dumps(body).encode() if body is not None else b''
+    req = urllib.request.Request(f'{BASE}{path}', data=data, method='POST',
+                                 headers={'Content-Type': 'application/json'})
+    # An OpenerDirector carries the cookie jar and exposes open(); the module-level
+    # helper is urlopen(). Different names, so pick one explicitly.
+    send = opener.open if opener is not None else urllib.request.urlopen
+    return send(req, timeout=20)
+
+
+def socket_url():
+    """Signs in, mints a ticket, and returns a ready-to-open WebSocket URL."""
+    if not USER or not PASSWORD:
+        sys.exit('Set HERMES_TEST_USER and HERMES_TEST_PASSWORD (the live-test gate).')
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    with _post('/auth/password-login',
+               {'provider': 'basic', 'username': USER, 'password': PASSWORD},
+               opener) as r:
+        if r.status != 200:
+            sys.exit(f'Sign-in failed: HTTP {r.status}')
+    with _post('/api/auth/ws-ticket', opener=opener) as r:
+        ticket = (json.load(r) or {}).get('ticket')
+    if not ticket:
+        sys.exit('The gateway did not return a ticket.')
+    ws_base = BASE.replace('https://', 'wss://').replace('http://', 'ws://')
+    return f'{ws_base}/api/ws?ticket={urllib.parse.quote(ticket)}'
+
+
+WS = socket_url()
 
 # An explicit allow-list, not a fuzzy match: this deletes conversations, and
 # `Probe3` or `Afficher testMATERIALAGENT_OK` may well be the user's own.
@@ -23,6 +61,10 @@ TITLES = (
     'clarify batch probe',
     'clarify qid probe',
     'payload probe 2',
+    # Created by the live suite itself: the turn round trip titles its session
+    # after the prompt, and the branch test forks one called "Branched".
+    'Répondre pong',
+    'Branched',
 )
 # Branching leaves behind a 0-message stored session; those are safe to drop too.
 EMPTY_BRANCH_TITLES = ('branched', 'branched #2')

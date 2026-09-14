@@ -64,19 +64,27 @@ OkHttp 4.12.0, kotlinx-serialization 1.7.3.
 
 ## Testing against a real server
 
-The JVM tests include a live round trip that skips itself unless a gateway is listening. Run a
-server on `home-server`, forward it, and point the test at it:
+The JVM tests include live round trips that skip themselves unless a gateway is listening and
+credentials are set. Run a server on `home-server`, forward it, and point the tests at it:
 
 ```bash
 ssh -N -L 19119:127.0.0.1:9119 home-server &     # or scripts/tunnel.sh start
 
-# The token is never stored in this repository. Keep it in the environment, or
-# in .hermes-test-token (gitignored) and scripts/tunnel.sh will pick it up.
-printf '%s' "$YOUR_TOKEN" > .hermes-test-token
+# The dashboard password is never stored in this repository. Enabling authentication
+# retired the old loopback `?token=` path, so the tests sign in the way the app does:
+# they keep the sign-in cookie and exchange it for a single-use socket ticket.
+export HERMES_TEST_HTTP='http://127.0.0.1:19119'   # or the tailnet URL on a phone
+readonly HERMES_TEST_USER='<username>'
+export HERMES_TEST_PASSWORD="$(cat ~/MaterialAgent-release/dashboard-password.txt)"
 
-HERMES_TEST_TOKEN="$(cat .hermes-test-token)" \
-  ./gradlew :app:testDebugUnitTest --tests '*HermesLiveTest*'
+./gradlew :app:testDebugUnitTest --tests '*HermesLiveTest*' --rerun-tasks --no-build-cache
 ```
+
+`--rerun-tasks --no-build-cache` is not optional. The environment is not a declared task input,
+so Gradle considers the test task up to date after any earlier run and — worse — restores the
+previous results XML from its build cache. The suite then reports the last run's `6 skipped`
+as if it had just executed, which is exactly what a passing run looks like. Only a forced run,
+with real per-test durations in the results, is evidence.
 
 Testing against a real gateway leaves conversations behind, so
 `scripts/session-cleanup.py` lists them and, with `--delete`, removes the ones this
@@ -87,8 +95,8 @@ script recognises. Deleting an open session answers `4023 cannot delete an activ
 session`, so it resumes the stored id to get the runtime id, closes that, and then
 deletes.
 
-Without a token the live tests skip rather than fail, so a clean checkout and CI
-both stay green. The dev server takes its token from `HERMES_DASHBOARD_SESSION_TOKEN`.
+Without credentials the live tests skip rather than fail, so a clean checkout and CI both stay
+green.
 
 It connects, lists sessions, creates one, sends a turn, waits for `message.delta` and the
 authoritative `message.complete`, parses usage, confirms the session persisted, reads history
