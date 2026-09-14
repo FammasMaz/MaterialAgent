@@ -108,7 +108,18 @@ class SessionRepository(
                 _sessions.value = list
                 _lastError.value = null
             },
-            onFailure = { error -> _lastError.value = error.message },
+            onFailure = { error ->
+                // Only a failure that happened over a live socket is a *list* problem.
+                // An error recorded while the socket is down is not: the disconnected
+                // state already says what to do, and storing it here made the banner
+                // outlive the outage — so a working connection kept showing "cancelled
+                // before it finished" until the user tapped Retry.
+                _lastError.value = if (connection.status.value is ConnectionStatus.Connected) {
+                    error.message
+                } else {
+                    null
+                }
+            },
         )
         return result.map { _sessions.value }
     }
