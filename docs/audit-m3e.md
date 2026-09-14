@@ -182,6 +182,8 @@ whole tray family is the *nesting* case in 1.2.
   (`Surfaces.kt:209`, `Expressive.kt:75` and the 6 call sites), which is the concurrent
   brand-mark work, not a defect.
 
+---
+
 ## 5. Haptics
 
 ### 5.1 Three distinct meanings share one waveform
@@ -227,8 +229,6 @@ whole tray family is the *nesting* case in 1.2.
 - `ui/screens/chat/ChatScreen.kt:212` gates `STREAM_TICK` on the user's `streamingHaptics`
   preference before it reaches the vibrator, and `Haptics.kt:49-58` caches the effects so a
   tick every ~18ms allocates nothing. Correct.
-
----
 
 ---
 
