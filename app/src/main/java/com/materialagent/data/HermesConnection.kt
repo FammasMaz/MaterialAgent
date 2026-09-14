@@ -75,22 +75,33 @@ class HermesConnection(
     private var reconnectJob: Job? = null
     @Volatile private var intentionalStop = false
 
+    /** Which attempt owns the status; see [AttemptGate]. */
+    private val attempts = AttemptGate()
+
+    /** Publishes [status] only while [attemptId] is still the newest attempt. */
+    private fun publish(attemptId: Int, status: ConnectionStatus) {
+        if (attempts.allows(attemptId)) _status.value = status
+    }
+
     suspend fun activate(profile: ServerProfile): ConnectionStatus {
         intentionalStop = false
         stopWatcher()
         activeProfile = profile
-        _status.value = ConnectionStatus.Connecting(profile)
+        // Claimed before dialling, so this connect supersedes anything already in
+        // flight and cannot be undone afterwards by the redial it replaced.
+        val attemptId = attempts.claim()
+        publish(attemptId, ConnectionStatus.Connecting(profile))
         return runCatching { dial(profile) }
             .fold(
                 onSuccess = {
                     val connected = ConnectionStatus.Connected(profile)
-                    _status.value = connected
+                    publish(attemptId, connected)
                     startWatcher(profile)
                     connected
                 },
                 onFailure = { error ->
                     val failure = classify(profile, error)
-                    _status.value = failure
+                    publish(attemptId, failure)
                     failure
                 },
             )
@@ -102,7 +113,7 @@ class HermesConnection(
         activeProfile = null
         _handshakeComplete.value = false
         client.disconnect("user disconnected")
-        _status.value = ConnectionStatus.Idle
+        publish(attempts.claim(), ConnectionStatus.Idle)
     }
 
     /** Re-dials the active profile; used by the "Retry" affordance. */
@@ -110,14 +121,18 @@ class HermesConnection(
         val profile = activeProfile ?: return
         intentionalStop = false
         stopWatcher()
+        // Claimed and published before the redial is launched: the status is never
+        // left reading Idle while an attempt is on its way, and the number the
+        // coroutine publishes its outcome under is already the newest.
+        val attemptId = attempts.claim()
+        publish(attemptId, ConnectionStatus.Connecting(profile))
         reconnectJob = scope.launch {
-            _status.value = ConnectionStatus.Connecting(profile)
             runCatching { dial(profile) }.fold(
                 onSuccess = {
-                    _status.value = ConnectionStatus.Connected(profile)
+                    publish(attemptId, ConnectionStatus.Connected(profile))
                     startWatcher(profile)
                 },
-                onFailure = { _status.value = classify(profile, it) },
+                onFailure = { publish(attemptId, classify(profile, it)) },
             )
         }
     }
@@ -133,16 +148,19 @@ class HermesConnection(
      * answer that arrived in the background is on screen when they get back.
      */
     fun onForeground() {
-        val profile = activeProfile ?: return
+        if (activeProfile == null) return
         if (intentionalStop) return
         client.checkLivenessOnForeground()
         // Still genuinely open: leave it alone rather than flashing a reconnect
         // banner at someone who simply switched apps and came back.
         if (client.state.value == com.materialagent.core.ConnectionState.OPEN) return
+        // An attempt is already under way — the launch connect or the watcher's
+        // own redial. Starting a second one on top of it is how the app ended up
+        // connected but labelled disconnected: both dialled, the first to finish
+        // cancelled the other, and the cancelled dial's verdict was published
+        // last. Whoever is already dialling will report its own outcome.
+        if (_status.value.isBusy) return
         retry()
-        if (_status.value is ConnectionStatus.Idle) {
-            _status.value = ConnectionStatus.Reconnecting(profile, 1)
-        }
     }
 
     /**
@@ -172,6 +190,10 @@ class HermesConnection(
 
     private fun startWatcher(profile: ServerProfile) {
         stopWatcher()
+        // The watcher is an attempt in its own right: it owns the status for as
+        // long as the socket lives, and every write below carries its number so a
+        // later connect silences it by claiming the next one.
+        val attemptId = attempts.claim()
         reconnectJob = scope.launch {
             var attempt = 0
             while (!intentionalStop && activeProfile?.id == profile.id) {
@@ -184,12 +206,15 @@ class HermesConnection(
                     } else {
                         "Could not reach ${profile.baseUrl}"
                     }
-                    _status.value = ConnectionStatus.Failed(profile, message, needsCredentials = false)
+                    publish(
+                        attemptId,
+                        ConnectionStatus.Failed(profile, message, needsCredentials = false),
+                    )
                     return@launch
                 }
                 if (state != com.materialagent.core.ConnectionState.OPEN) {
                     attempt += 1
-                    _status.value = ConnectionStatus.Reconnecting(profile, attempt)
+                    publish(attemptId, ConnectionStatus.Reconnecting(profile, attempt))
                     val backoff = (BASE_BACKOFF_MS * (1L shl (attempt - 1).coerceAtMost(4)))
                         .coerceAtMost(MAX_BACKOFF_MS)
                     delay(backoff)
@@ -197,11 +222,11 @@ class HermesConnection(
                     val ok = runCatching { dial(profile) }.isSuccess
                     if (ok) {
                         attempt = 0
-                        _status.value = ConnectionStatus.Connected(profile)
+                        publish(attemptId, ConnectionStatus.Connected(profile))
                     }
                 } else if (attempt != 0) {
                     attempt = 0
-                    _status.value = ConnectionStatus.Connected(profile)
+                    publish(attemptId, ConnectionStatus.Connected(profile))
                 }
             }
         }
