@@ -1,6 +1,7 @@
 package com.materialagent.data.chat
 
 import com.materialagent.core.model.MediaRef
+import com.materialagent.core.model.OutgoingAttachment
 import kotlinx.serialization.json.JsonObject
 
 /** What kind of row a transcript entry is. Drives the surface's geometry. */
@@ -118,6 +119,16 @@ data class TranscriptEntry(
     val tool: ToolInfo? = null,
     val interactive: InteractiveRequest? = null,
     val todos: List<TodoItem> = emptyList(),
+    /**
+     * Files the user attached to this turn.
+     *
+     * A local echo, and deliberately so: the gateway does not put attachments in
+     * the stored user row, so reopening a conversation replays the prose but not
+     * the pictures. What *is* durable is the effect — a file's `@file:` ref lives
+     * in the submitted text, and an image is already in the agent's own turn. The
+     * chips exist so the person who just pressed send can see what went with it.
+     */
+    val attachments: List<OutgoingAttachment> = emptyList(),
     val timestamp: Double? = null,
     val completedAt: Double? = null,
     val status: EntryStatus = EntryStatus.COMPLETE,

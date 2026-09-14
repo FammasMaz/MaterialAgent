@@ -1,9 +1,13 @@
 package com.materialagent.data
 
+import com.materialagent.core.AttachmentParams
 import com.materialagent.core.HermesRpcException
 import com.materialagent.core.InteractionParams
 import com.materialagent.core.str
+import com.materialagent.core.model.AttachmentPrompt
 import com.materialagent.core.model.GatewayEvent
+import com.materialagent.core.model.MediaKind
+import com.materialagent.core.model.OutgoingAttachment
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.data.chat.ChatReducer
 import com.materialagent.data.chat.ChatTranscript
@@ -19,9 +23,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /**
  * Semantic moments the UI should feel — not a haptic call, because this layer
@@ -67,6 +68,7 @@ enum class HapticCue {
 class ChatController(
     private val connection: HermesConnection,
     private val sessions: SessionRepository,
+    private val attachments: AttachmentSender,
     private val scope: CoroutineScope,
 ) {
 
@@ -264,36 +266,74 @@ class ChatController(
         return block(resumed.sessionId)
     }
 
-    suspend fun submit(text: String): Result<Unit> {
-        val sessionId = _transcript.value.sessionId
-        if (text.isBlank()) return Result.success(Unit)
-        if (sessionId == null) {
+    /**
+     * Sends a turn, staging any picked files first.
+     *
+     * Order is not a choice. Images are queued on the gateway for the *next*
+     * submit to claim, and a file's `@file:` reference is returned by the upload
+     * and has to be inside the prompt text, so both uploads must complete before
+     * the turn is submitted — there is no way to attach anything after the fact.
+     *
+     * The upload is not rolled back silently. A turn that fails after some images
+     * were already queued takes them back off the session, because the queue is
+     * claimed by *whatever* is submitted next and a leftover image would ride
+     * along with a later, unrelated message. When even that fails, the error says
+     * so instead of pretending the retry starts clean.
+     */
+    suspend fun submit(
+        text: String,
+        pending: List<OutgoingAttachment> = emptyList(),
+    ): Result<Unit> {
+        if (text.isBlank() && pending.isEmpty()) return Result.success(Unit)
+        if (_transcript.value.sessionId == null) {
             val created = create()
             if (created.isFailure) return created
         }
-        val liveId = _transcript.value.sessionId ?: return Result.failure(IllegalStateException("No session"))
-        val optimistic = ChatReducer.submitUser(_transcript.value, text, nowSeconds())
+
+        val optimistic = ChatReducer.submitUser(_transcript.value, text, nowSeconds(), pending)
         _transcript.value = optimistic
         _sending.value = true
         _cues.tryEmit(HapticCue.SENT)
 
+        val staged = if (pending.isEmpty()) {
+            Result.success(StagedAttachments())
+        } else {
+            withLiveSession { runtimeId -> attachments.stage(runtimeId, pending) }
+        }
+        val uploaded = staged.getOrElse { return failSend(it) }
+
+        val prompt = AttachmentPrompt.compose(
+            text = text,
+            fileRefs = uploaded.fileRefs,
+            hasImage = pending.any { it.kind == MediaKind.IMAGE },
+        )
+
         val result = withLiveSession { runtimeId ->
-            connection.send(
-                "prompt.submit",
-                buildJsonObject {
-                    put("session_id", JsonPrimitive(runtimeId))
-                    put("text", JsonPrimitive(text))
-                },
-            )
+            connection.send("prompt.submit", AttachmentParams.promptSubmit(runtimeId, prompt))
         }
-        _sending.value = false
         if (result.isFailure) {
-            _transcript.value = _transcript.value.copy(
-                running = false,
-                historyError = result.exceptionOrNull()?.message ?: "Could not send",
-            )
+            val stranded = _transcript.value.sessionId
+                ?.let { attachments.releaseImages(it, uploaded.imagePaths) }
+                ?: uploaded.imagePaths.size
+            return failSend(result.exceptionOrNull(), stranded)
         }
-        return result.map { }
+
+        _sending.value = false
+        return Result.success(Unit)
+    }
+
+    private fun failSend(error: Throwable?, strandedImages: Int = 0): Result<Unit> {
+        _sending.value = false
+        val base = error?.message ?: "Could not send"
+        val message = if (strandedImages > 0) {
+            "$base — $strandedImages attached " +
+                (if (strandedImages == 1) "image" else "images") +
+                " could not be withdrawn and will go with your next message."
+        } else {
+            base
+        }
+        _transcript.value = _transcript.value.copy(running = false, historyError = message)
+        return Result.failure(error ?: IllegalStateException(message))
     }
 
     suspend fun interrupt(): Result<Unit> {

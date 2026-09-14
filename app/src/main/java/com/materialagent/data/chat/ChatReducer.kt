@@ -14,6 +14,7 @@ import com.materialagent.core.model.HistoryRow
 import com.materialagent.core.model.MediaMarkers
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.core.model.Usage
+import com.materialagent.core.model.OutgoingAttachment
 import kotlinx.serialization.json.JsonObject
 
 /**
@@ -32,11 +33,17 @@ object ChatReducer {
 
     private const val MAX_STREAM_CHARS = 200_000
 
-    fun submitUser(state: ChatTranscript, text: String, now: Double): ChatTranscript {
+    fun submitUser(
+        state: ChatTranscript,
+        text: String,
+        now: Double,
+        attachments: List<OutgoingAttachment> = emptyList(),
+    ): ChatTranscript {
         val entry = TranscriptEntry(
             id = "user-${now.toLong()}-${text.hashCode()}",
             kind = EntryKind.USER,
             text = text,
+            attachments = attachments,
             timestamp = now,
             status = EntryStatus.COMPLETE,
         )

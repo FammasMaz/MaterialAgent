@@ -87,6 +87,8 @@ import com.materialagent.data.chat.EntryKind
 import com.materialagent.data.chat.EntryStatus
 import com.materialagent.data.chat.InteractiveRequest
 import com.materialagent.data.chat.TodoItem
+import com.materialagent.core.model.AttachmentRefs
+import com.materialagent.core.model.OutgoingAttachment
 import com.materialagent.data.chat.ToolInfo
 import com.materialagent.data.chat.TranscriptEntry
 import com.materialagent.ui.components.AgentOrb
@@ -96,6 +98,8 @@ import com.materialagent.ui.components.StreamingText
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.PlainCodeBlock
 import com.materialagent.ui.components.media.MediaStrip
+import com.materialagent.ui.components.media.OutgoingAttachmentStrip
+import com.materialagent.ui.components.media.StoredRefStrip
 import com.materialagent.ui.components.pressScale
 import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.LocalMotionLevel
@@ -122,10 +126,19 @@ private fun Modifier.rowPadding() = padding(horizontal = 16.dp)
 fun UserBubble(
     text: String,
     timestamp: Double?,
+    attachments: List<OutgoingAttachment> = emptyList(),
     onLongPress: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    /*
+     * A turn attached to *now* carries its files in [attachments]. The same turn
+     * read back from the gateway carries them as `@image:` / `@file:` lines in
+     * the stored text, because that is how the server recorded the submission.
+     * Only the live copy can have both, and it never does, so the two renderings
+     * cannot double up.
+     */
+    val stored = remember(text) { AttachmentRefs.split(text) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -138,11 +151,24 @@ fun UserBubble(
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.fillMaxWidth(0.88f),
         ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyLarge,
+            Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            )
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Files first, prose under them: the attachment is what the turn
+                // was *about*, and a one-line "here" above a photo pushes the
+                // picture below the fold of its own bubble.
+                OutgoingAttachmentStrip(attachments = attachments)
+                if (attachments.isEmpty() && stored.refs.isNotEmpty()) {
+                    StoredRefStrip(refs = stored.refs)
+                }
+                if (stored.text.isNotBlank()) {
+                    Text(
+                        text = stored.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
         }
         if (timestamp != null) {
             Spacer(Modifier.height(4.dp))

@@ -39,7 +39,14 @@ class AppContainer(context: Context) {
     val connection = HermesConnection(Http.client, secrets, scope)
     val sessions = SessionRepository(connection, scope)
     val capabilities = CapabilityRepository(connection)
-    val chat = ChatController(connection, sessions, scope)
+
+    /**
+     * Stages the user's picked files on the gateway. Takes the application's
+     * resolver rather than a screen's, so a pick made in the composer is still
+     * readable while a turn is being sent from somewhere else.
+     */
+    val attachments = AttachmentSender(connection, context.contentResolver)
+    val chat = ChatController(connection, sessions, attachments, scope)
     val updates = UpdateManager(
         context = context,
         settings = settings,

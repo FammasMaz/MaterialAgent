@@ -2,6 +2,8 @@ package com.materialagent.ui.screens.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.materialagent.core.model.OutgoingAttachment
+import com.materialagent.core.model.OutgoingAttachments
 import com.materialagent.data.AppContainer
 import com.materialagent.data.chat.ChatTranscript
 import com.materialagent.data.chat.InteractiveRequest
@@ -30,6 +32,19 @@ class ChatViewModel(
 
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
+
+    /**
+     * Files picked for the next turn, in the order they were added.
+     *
+     * View state, not transcript state: the files belong to the half-written
+     * message in front of the user, exactly like the draft. The controller only
+     * learns about them at send time, which is also when their bytes are read —
+     * holding a 25 MB image in a screen's state for the minutes between picking
+     * and sending would be the whole reason the app gets killed in the
+     * background.
+     */
+    private val _attachments = MutableStateFlow<List<OutgoingAttachment>>(emptyList())
+    val attachments: StateFlow<List<OutgoingAttachment>> = _attachments.asStateFlow()
 
     private val _notice = MutableStateFlow<String?>(null)
     val notice: StateFlow<String?> = _notice.asStateFlow()
@@ -65,15 +80,46 @@ class ChatViewModel(
         _draft.value = text
     }
 
+    /**
+     * Adds a picked file, or explains why it cannot go.
+     *
+     * Size is checked here rather than at send time so the answer arrives while
+     * the user is still looking at the picker's result. [OutgoingAttachment] can
+     * be null because a picker that is cancelled still calls back.
+     */
+    fun attach(attachment: OutgoingAttachment?) {
+        if (attachment == null) return
+        OutgoingAttachments
+            .rejectReason(attachment.kind, attachment.sizeBytes, attachment.name)
+            ?.let { reason ->
+                _notice.value = reason
+                return
+            }
+        // Picking the same file twice is a slip, not a request to send it twice.
+        if (_attachments.value.any { it.uri == attachment.uri }) return
+        _attachments.value = _attachments.value + attachment
+    }
+
+    fun removeAttachment(attachment: OutgoingAttachment) {
+        _attachments.value = _attachments.value.filterNot { it.uri == attachment.uri }
+    }
+
     fun send() {
         val text = _draft.value.trim()
-        if (text.isEmpty()) return
+        val queued = _attachments.value
+        // A picture with no words is still a message; only an empty composer with
+        // nothing attached is a no-op.
+        if (text.isEmpty() && queued.isEmpty()) return
         _draft.value = ""
+        _attachments.value = emptyList()
         viewModelScope.launch {
-            container.chat.submit(text).onFailure { error ->
+            container.chat.submit(text, queued).onFailure { error ->
                 _notice.value = error.message ?: "Message not delivered"
-                // Put the text back so nothing the user typed is ever lost.
+                // Put back everything the turn did not manage to send — the text
+                // and the files alike. A failed upload the user cannot retry
+                // without picking every photo again is a failure twice over.
                 _draft.value = text
+                _attachments.value = queued + _attachments.value
             }
         }
     }

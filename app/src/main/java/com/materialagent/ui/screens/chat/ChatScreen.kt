@@ -1,5 +1,8 @@
 package com.materialagent.ui.screens.chat
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -38,12 +41,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.CallSplit
 import androidx.compose.material.icons.rounded.AltRoute
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -82,6 +89,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
@@ -90,9 +98,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.materialagent.core.model.OutgoingAttachment
 import com.materialagent.core.model.ProviderInfo
 import com.materialagent.data.ConnectionStatus
 import com.materialagent.data.HapticCue
+import com.materialagent.data.describeAttachment
 import com.materialagent.data.chat.EntryKind
 import com.materialagent.data.chat.TranscriptEntry
 import com.materialagent.ui.AgentViewModel
@@ -102,6 +112,7 @@ import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.media.LocalMediaEnvironment
+import com.materialagent.ui.components.media.PendingAttachmentsBubble
 import com.materialagent.ui.components.media.rememberMediaEnvironment
 import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.components.NoticeBanner
@@ -146,6 +157,7 @@ fun ChatScreen(
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val statusText by viewModel.statusText.collectAsStateWithLifecycle()
     val providers by viewModel.providers.collectAsStateWithLifecycle()
+    val pendingFiles by viewModel.attachments.collectAsStateWithLifecycle()
     val connection by app.status.collectAsStateWithLifecycle()
     val showReasoning = LocalShowReasoning.current
     val showTools = LocalShowToolCalls.current
@@ -169,6 +181,7 @@ fun ChatScreen(
 
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     var modelSheetOpen by remember { mutableStateOf(false) }
     var infoSheetOpen by remember { mutableStateOf(false) }
@@ -179,6 +192,27 @@ fun ChatScreen(
     val storedSessions by container.sessions.sessions.collectAsStateWithLifecycle()
     val summary = remember(transcript.storedSessionId, storedSessions) {
         storedSessions.firstOrNull { it.id == transcript.storedSessionId }
+    }
+
+    /*
+     * Three pickers, because "attach a file" means three different things on a
+     * phone. The photo picker is the platform's own gallery UI; the audio one is
+     * narrowed to audio MIME types so a voice note cannot be answered with a
+     * 40-minute video; documents take anything, which is the honest default for a
+     * catch-all.
+     *
+     * All three hand back a `content://` URI, so all three describe it the same
+     * way — the display name and size only exist in the provider's metadata, and
+     * a cancelled pick still calls back with null.
+     */
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        viewModel.attach(uri?.let { describeAttachment(context, it) })
+    }
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        viewModel.attach(uri?.let { describeAttachment(context, it) })
+    }
+    val documentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        viewModel.attach(uri?.let { describeAttachment(context, it) })
     }
 
     // Semantic haptics for the whole turn, filtered by the user's preference.
@@ -384,12 +418,29 @@ fun ChatScreen(
                 }
             }
 
+            PendingAttachmentsBubble(
+                attachments = pendingFiles,
+                onRemove = viewModel::removeAttachment,
+                modifier = Modifier.padding(bottom = 2.dp),
+            )
+
             Composer(
                 draft = draft,
                 running = transcript.running,
                 sending = sending,
                 enabled = connection !is ConnectionStatus.Failed,
+                attachments = pendingFiles,
                 onDraftChange = viewModel::updateDraft,
+                onAttach = { source ->
+                    when (source) {
+                        AttachSource.PHOTO -> photoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                        )
+
+                        AttachSource.AUDIO -> audioPicker.launch("audio/*")
+                        AttachSource.DOCUMENT -> documentPicker.launch(arrayOf("*/*"))
+                    }
+                },
                 onSend = {
                     // The one interaction the user repeats all day, and the one that
                     // most needs an answer: "the app took it".
@@ -457,7 +508,11 @@ private fun TranscriptRow(
     onCue: (HapticCue) -> Unit,
 ) {
     when (entry.kind) {
-        EntryKind.USER -> UserBubble(text = entry.text, timestamp = entry.timestamp)
+        EntryKind.USER -> UserBubble(
+            text = entry.text,
+            timestamp = entry.timestamp,
+            attachments = entry.attachments,
+        )
 
         EntryKind.ASSISTANT -> AssistantBlock(
             entry = entry,
@@ -643,12 +698,17 @@ private fun Composer(
     running: Boolean,
     sending: Boolean,
     enabled: Boolean,
+    attachments: List<OutgoingAttachment>,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
     onSteer: () -> Unit,
     onStop: () -> Unit,
+    onAttach: (AttachSource) -> Unit,
 ) {
-    val canSend = draft.isNotBlank() && !sending && enabled
+    // Files count as something to send: a photo with no caption is a complete
+    // message, and gating the send button on the text alone made an attached
+    // picture look unsendable.
+    val canSend = (draft.isNotBlank() || attachments.isNotEmpty()) && !sending && enabled
     val steering = running && draft.isNotBlank()
     val sendOnEnter = LocalSendOnEnter.current
 
@@ -696,7 +756,11 @@ private fun Composer(
                 onValueChange = onDraftChange,
                 placeholder = {
                     Text(
-                        if (running) "Steer the agent…" else "Message your agent…",
+                        when {
+                            attachments.isNotEmpty() -> "Add a note (optional)…"
+                            running -> "Steer the agent…"
+                            else -> "Message your agent…"
+                        },
                         maxLines = 1,
                     )
                 },
@@ -720,6 +784,20 @@ private fun Composer(
                     disabledIndicatorColor = Color.Transparent,
                 ),
                 modifier = Modifier.weight(1f),
+            )
+
+            Spacer(Modifier.width(4.dp))
+
+            // The attach control sits between the text and the action disc rather
+            // than on the other side of the field: the composer is a row of things
+            // the user may want to do to *this* message, and putting the picker
+            // next to send is what makes "add a file, then send" one motion.
+            AttachButton(
+                // Steering and stopping take no attachments — `session.steer` is
+                // text-only — so offering the picker mid-turn would collect files
+                // that the next tap silently discards.
+                enabled = enabled && !running,
+                onAttach = onAttach,
             )
 
             Spacer(Modifier.width(4.dp))
@@ -780,6 +858,64 @@ private fun Composer(
 }
 
 private enum class ComposerAction { SEND, STEER, STOP }
+
+/** Which picker the user meant by "attach". */
+enum class AttachSource { PHOTO, AUDIO, DOCUMENT }
+
+/**
+ * The attach affordance: one control, three sources.
+ *
+ * A menu rather than three buttons, because two of the three sources are rare —
+ * a voice note or a PDF — and giving them equal billing with the photo picker
+ * would trade a couple of taps saved for a permanently wider composer. A plain
+ * `IconButton` rather than a filled one keeps the send disc the only emphasised
+ * control in the row, which is where the eye should end up.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun AttachButton(
+    enabled: Boolean,
+    onAttach: (AttachSource) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { open = true },
+            enabled = enabled,
+            shapes = IconButtonDefaults.shapes(),
+            modifier = Modifier.size(48.dp),
+        ) {
+            Icon(Icons.Rounded.Add, contentDescription = "Attach a photo, sound or file")
+        }
+
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Photo") },
+                leadingIcon = { Icon(Icons.Rounded.PhotoLibrary, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onAttach(AttachSource.PHOTO)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Audio") },
+                leadingIcon = { Icon(Icons.Rounded.GraphicEq, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onAttach(AttachSource.AUDIO)
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("File") },
+                leadingIcon = { Icon(Icons.Rounded.Description, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onAttach(AttachSource.DOCUMENT)
+                },
+            )
+        }
+    }
+}
 
 /**
  * The address media rows should fetch from, for whichever connection state the

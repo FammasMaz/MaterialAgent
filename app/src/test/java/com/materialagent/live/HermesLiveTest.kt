@@ -1,5 +1,6 @@
 package com.materialagent.live
 
+import com.materialagent.core.AttachmentParams
 import com.materialagent.core.ConnectionState
 import com.materialagent.core.HermesJson
 import com.materialagent.core.HermesClient
@@ -14,7 +15,10 @@ import com.materialagent.core.objOrNull
 import com.materialagent.core.str
 import com.materialagent.core.strAny
 import com.materialagent.core.strOrNull
+import com.materialagent.core.model.AttachmentPrompt
+import com.materialagent.core.model.AttachmentReports
 import com.materialagent.core.model.GatewayEvent
+import com.materialagent.core.model.OutgoingAttachments
 import com.materialagent.core.model.SessionInfo
 import com.materialagent.core.model.SessionSummary
 import com.materialagent.core.model.Usage
@@ -111,6 +115,170 @@ class HermesLiveTest {
             println("──────── hermes live run ────────")
             print(transcript)
             println("─────────────────────────────────")
+        }
+    }
+
+    /**
+     * The attachment contract: bytes up, references back, files delivered.
+     *
+     * Three things had to be true before the app could let a user send anything,
+     * and all three are asserted here rather than inferred:
+     *
+     *  1. an image's *bytes* reach the gateway and come back as a path queued on
+     *     the session, with the queue's own count;
+     *  2. that queue can be shrunk again (`image.detach`), because a turn that
+     *     fails after staging has to be able to put things back;
+     *  3. a non-image's bytes reach the gateway and come back as a `@file:`
+     *     reference that a prompt carrying it actually delivers to the agent.
+     *
+     * Point 3 is why the assertion looks at the agent's own answer: the gateway
+     * has a second, path-resolving branch for `file.attach`, and a client that
+     * sent the wrong field would still get `attached: true` while the agent read
+     * some unrelated file off the server's disk. `uploaded` proves the bytes
+     * crossed, and the answer's contents prove the reference worked.
+     */
+    @Test(timeout = 480_000)
+    fun attachmentUploadRoundTrip() {
+        val wsUrl = configuredGateway()
+        assumeTrue(
+            "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
+            gatewayReachable(wsUrl),
+        )
+
+        val http = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            // 33 MB of base64 on a bad link is not fast; the write side gets the
+            // same generosity the read side already had.
+            .readTimeout(180, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(http, scope)
+        val transcript = StringBuilder()
+        fun note(line: String) {
+            transcript.appendLine(line)
+        }
+
+        val events = CopyOnWriteArrayList<GatewayEvent>()
+        val collectorScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        var runtime: String? = null
+        var stored: String? = null
+
+        try {
+            collectorScope.launch { client.events.collect { events.add(it) } }
+
+            runBlocking {
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+
+                val created = client.request(
+                    "session.create",
+                    buildJsonObject {
+                        put("source", JsonPrimitive("mobile"))
+                        put("title", JsonPrimitive("MaterialAgent attachment test"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                runtime = created.str("session_id").orEmpty()
+                stored = created.str("stored_session_id")
+                val live = runtime!!
+                note("created    runtime=$live stored=$stored")
+
+                // 1 ── an image's bytes, staged through the app's own params.
+                val firstImage = client.request(
+                    "image.attach_bytes",
+                    AttachmentParams.imageAttachBytes(live, "materialagent-probe.png", TINY_PNG_BASE64),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("image 1    $firstImage")
+                val first = AttachmentReports.parseImage(firstImage)
+                    ?: failed("image.attach_bytes did not report an attached image: $firstImage")
+                assertTrue("a staged image must carry a gateway path, got '${first.path}'", first.path.isNotBlank())
+                assertEquals("one staged image means a queue of one", 1, first.count)
+
+                val secondImage = client.request(
+                    "image.attach_bytes",
+                    AttachmentParams.imageAttachBytes(live, "materialagent-probe-2.png", TINY_PNG_BASE64),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                val second = AttachmentReports.parseImage(secondImage)
+                    ?: failed("the second image was refused: $secondImage")
+                assertEquals("the count is the queue depth, not a per-call flag", 2, second.count)
+
+                // 2 ── and one of them can be taken back off it.
+                val detached = client.request(
+                    "image.detach",
+                    AttachmentParams.imageDetach(live, second.path),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("detached   ${second.path} -> $detached")
+                // The gateway names this field `detached`; `removed` matches
+                // nothing and reads back as null, which is a failed detach that
+                // looks like a successful one.
+                assertEquals("image.detach must confirm the removal", true, detached.bool("detached"))
+                assertEquals("detaching must leave exactly one image queued", 1, detached.int("count"))
+
+                // 3 ── a non-image's bytes, staged through the app's own params.
+                val fileBody = "materialagent-attachment-probe"
+                val attachedFile = client.request(
+                    "file.attach",
+                    AttachmentParams.fileAttach(
+                        sessionId = live,
+                        // Deliberately a client-side URI that cannot resolve on the
+                        // gateway: this is the branch the app is on.
+                        path = "content://com.materialagent.probe/document/1",
+                        name = "materialagent-probe.txt",
+                        dataUrl = OutgoingAttachments.dataUrl("text/plain", fileBody.toByteArray()),
+                    ),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("file       $attachedFile")
+                assertEquals(
+                    "file.attach must report the bytes as uploaded rather than resolving a path " +
+                        "on the gateway: $attachedFile",
+                    true,
+                    attachedFile.bool("uploaded"),
+                )
+                val staged = AttachmentReports.parseFile(attachedFile)
+                    ?: failed("file.attach did not report a staged file: $attachedFile")
+                val ref = staged.refText ?: failed("file.attach returned no ref_text: $attachedFile")
+                assertTrue("the reference must be an @file: ref, got '$ref'", ref.startsWith("@file:"))
+                assertTrue("the reference must name the staged file, got '$ref'", ref.contains("materialagent-probe"))
+
+                // 4 ── the composed prompt leads with that reference, and the turn
+                //      carrying it actually hands the file to the agent.
+                val prompt = AttachmentPrompt.compose(
+                    text = "Reply with only the single line contained in the attached file.",
+                    fileRefs = listOf(ref),
+                    hasImage = true,
+                )
+                assertTrue("the file reference must lead the prompt, got '$prompt'", prompt.startsWith(ref))
+
+                events.clear()
+                val startedAt = System.currentTimeMillis()
+                client.request(
+                    "prompt.submit",
+                    AttachmentParams.promptSubmit(live, prompt),
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                val completion = awaitMessageComplete(events, live, startedAt, ::note)
+                val answer = completion.payload.strAny("text", "content").orEmpty()
+                note("answer     ${answer.take(200).replace('\n', ' ')}")
+                assertTrue(
+                    "the agent must have read the uploaded file; the answer was '${answer.take(200)}'",
+                    answer.contains(fileBody),
+                )
+            }
+        } finally {
+            runBlocking { runCatching { cleanup(client, runtime, stored, ::note) } }
+            client.disconnect("attachment test finished")
+            collectorScope.cancel()
+            scope.cancel()
+            println("──────── hermes attachment run ────────")
+            print(transcript)
+            println("───────────────────────────────────────")
         }
     }
 
@@ -1273,6 +1441,16 @@ class HermesLiveTest {
 
         /** A dangerous command has to reach the gate, which means a model round trip first. */
         const val APPROVAL_WAIT_MS = 150_000L
+
+        /**
+         * A real 1x1 PNG, base64.
+         *
+         * A real file rather than random bytes: the gateway sniffs magic bytes
+         * and rejects anything it cannot identify as an image, so a placeholder
+         * would test the rejection path instead of the upload one.
+         */
+        const val TINY_PNG_BASE64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
         const val LIST_TIMEOUT_MS = 45_000L
         const val PROGRESS_EVERY_MS = 15_000L
         const val PROBE_TIMEOUT_MS = 2_000L
