@@ -9,12 +9,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.materialagent.ui.theme.CodeTextStyle
+import com.materialagent.ui.theme.ExpressiveMotion
 
 /*
  * A deliberately small Markdown renderer.
@@ -80,7 +84,13 @@ fun MarkdownText(
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     color: Color = MaterialTheme.colorScheme.onSurface,
 ) {
-    val blocks = remember(text) { parseMarkdown(text) }
+    // Read theme colours here: the parser is non-composable, so every colour it
+    // bakes into a span has to be threaded down to it.
+    val linkColor = MaterialTheme.colorScheme.primary
+    val inlineCodeBackground = MaterialTheme.colorScheme.surfaceContainerHighest
+    val blocks = remember(text, linkColor, inlineCodeBackground) {
+        parseMarkdown(text, linkColor, inlineCodeBackground)
+    }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         blocks.forEach { block ->
@@ -110,7 +120,9 @@ fun MarkdownText(
                         text = block.marker,
                         style = style,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(22.dp),
+                        // min, not fixed: "10." is wider than 22dp and would wrap,
+                        // desyncing the marker from its text.
+                        modifier = Modifier.widthIn(min = 22.dp),
                     )
                     Text(
                         text = block.spans,
@@ -120,11 +132,17 @@ fun MarkdownText(
                     )
                 }
 
-                is Block.Quote -> Row(modifier = Modifier.fillMaxWidth()) {
+                is Block.Quote -> Row(
+                    // IntrinsicSize.Min so the accent bar can fill the wrapped
+                    // text height instead of covering only the first line.
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                ) {
                     Spacer(
                         modifier = Modifier
                             .width(3.dp)
-                            .height(18.dp)
+                            .fillMaxHeight()
                             .background(
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                                 RoundedCornerShape(2.dp),
@@ -163,7 +181,9 @@ fun CodeBlock(
 
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        // Must stay identical to PlainCodeBlock's shape: the two surfaces render
+        // adjacently inside one tool card.
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
@@ -203,7 +223,7 @@ fun CodeBlock(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
                     .padding(end = 10.dp)
-                    .animateContentSize(),
+                    .animateContentSize(animationSpec = ExpressiveMotion.Specs.contentSize),
             )
         }
     }
@@ -218,7 +238,9 @@ fun PlainCodeBlock(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        // Must stay identical to CodeBlock's shape: the two surfaces render
+        // adjacently inside one tool card.
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
@@ -242,7 +264,7 @@ private val HEADING = Regex("^(#{1,6})\\s+(.*)$")
 private val QUOTE = Regex("^\\s*>\\s?(.*)$")
 private val RULE = Regex("^\\s*([-*_])\\s*(\\1\\s*){2,}$")
 
-private fun parseMarkdown(text: String): List<Block> {
+private fun parseMarkdown(text: String, linkColor: Color, codeBackground: Color): List<Block> {
     val blocks = mutableListOf<Block>()
     val lines = text.replace("\r\n", "\n").split("\n")
     val paragraph = StringBuilder()
@@ -250,7 +272,7 @@ private fun parseMarkdown(text: String): List<Block> {
 
     fun flushParagraph() {
         if (paragraph.isNotEmpty()) {
-            blocks += Block.Para(inline(paragraph.toString()))
+            blocks += Block.Para(inline(paragraph.toString(), linkColor, codeBackground))
             paragraph.clear()
         }
     }
@@ -292,14 +314,17 @@ private fun parseMarkdown(text: String): List<Block> {
 
             heading != null -> {
                 flushParagraph()
-                blocks += Block.Heading(heading.groupValues[1].length, inline(heading.groupValues[2].trim()))
+                blocks += Block.Heading(
+                    heading.groupValues[1].length,
+                    inline(heading.groupValues[2].trim(), linkColor, codeBackground),
+                )
                 index += 1
             }
 
             bullet != null -> {
                 flushParagraph()
                 blocks += Block.Item(
-                    spans = inline(bullet.groupValues[2]),
+                    spans = inline(bullet.groupValues[2], linkColor, codeBackground),
                     marker = if (bullet.groupValues[1].length >= 2) "◦" else "•",
                     depth = (bullet.groupValues[1].length / 2).coerceAtMost(3),
                 )
@@ -309,7 +334,7 @@ private fun parseMarkdown(text: String): List<Block> {
             ordered != null -> {
                 flushParagraph()
                 blocks += Block.Item(
-                    spans = inline(ordered.groupValues[3]),
+                    spans = inline(ordered.groupValues[3], linkColor, codeBackground),
                     marker = "${ordered.groupValues[2]}.",
                     depth = (ordered.groupValues[1].length / 2).coerceAtMost(3),
                 )
@@ -318,7 +343,7 @@ private fun parseMarkdown(text: String): List<Block> {
 
             quote != null -> {
                 flushParagraph()
-                blocks += Block.Quote(inline(quote.groupValues[1]))
+                blocks += Block.Quote(inline(quote.groupValues[1], linkColor, codeBackground))
                 index += 1
             }
 
@@ -355,7 +380,7 @@ private fun endsEmphasis(source: String, index: Int, tokenLength: Int): Boolean 
     }
 }
 
-private fun inline(source: String): AnnotatedString = buildAnnotatedString {
+private fun inline(source: String, linkColor: Color, codeBackground: Color): AnnotatedString = buildAnnotatedString {
     var i = 0
     while (i < source.length) {
         val char = source[i]
@@ -366,7 +391,7 @@ private fun inline(source: String): AnnotatedString = buildAnnotatedString {
                     append(source.substring(i))
                     return@buildAnnotatedString
                 }
-                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = Color(0x2A808080))) {
+                withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = codeBackground)) {
                     append(source.substring(i + 1, end))
                 }
                 i = end + 1
@@ -439,7 +464,7 @@ private fun inline(source: String): AnnotatedString = buildAnnotatedString {
                     withLink(LinkAnnotation.Url(url)) {
                         withStyle(
                             SpanStyle(
-                                color = Color(0xFF6FA8FF),
+                                color = linkColor,
                                 textDecoration = TextDecoration.Underline,
                             ),
                         ) {
