@@ -206,7 +206,8 @@ class HermesConnection(
     private fun loginForTicket(profile: ServerProfile, password: String): Pair<String, String> {
         val providerName = discoverPasswordProvider(profile)
             ?: throw HermesTransportException(
-                "This server has no password sign-in enabled. Start it with a password provider, or use a token over a tunnel.",
+                "${profile.baseUrl} answered, but offers no password sign-in. " +
+                    "Add a password provider on the server, or use a token.",
             )
 
         val loginUrl = HermesUrl.endpoint(profile.baseUrl, "/auth/password-login")
@@ -252,20 +253,57 @@ class HermesConnection(
         return "ticket" to ticket
     }
 
-    /** Finds a session provider that accepts a password, if the server has one. */
+    /**
+     * Finds a session provider that accepts a password.
+     *
+     * Returns null only when the server *answered* and genuinely offers none.
+     * Anything else throws, because the old shape — swallowing every failure
+     * through `runCatching` — reported "this server has no password sign-in"
+     * even when the phone never reached it, which blames the server for a
+     * transport problem and sends the user off to change server config that was
+     * never wrong.
+     */
     private fun discoverPasswordProvider(profile: ServerProfile): String? {
         val url = HermesUrl.endpoint(profile.baseUrl, "/api/auth/providers")
-            ?: return null
-        return runCatching {
+            ?: throw HermesTransportException("Not a valid server address: ${profile.baseUrl}")
+
+        val body = try {
             http.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                val root = HermesJson.parseToJsonElement(response.body?.string().orEmpty()).objOrNull()
-                val providers = root?.get("providers")?.arrOrNull() ?: return@use null
-                providers.mapNotNull { it.objOrNull() }
-                    .firstOrNull { it.str("supports_password")?.let { flag -> flag == "true" || flag == "True" } == true }
-                    ?.str("name")
+                if (!response.isSuccessful) {
+                    throw HermesTransportException(
+                        when (response.code) {
+                            // The gateway rejects any Host it has not been told about, and
+                            // dashboard.public_url is the only name it trusts for that.
+                            in listOf(400, 403, 421) ->
+                                "${profile.baseUrl} refused this address (HTTP ${response.code}). " +
+                                    "The gateway only trusts its configured dashboard.public_url."
+
+                            404 ->
+                                "${profile.baseUrl} has no sign-in endpoint. " +
+                                    "It is probably not a Hermes gateway, or it is an older build."
+
+                            else ->
+                                "Could not check sign-in options at ${profile.baseUrl} (HTTP ${response.code})."
+                        },
+                    )
+                }
+                response.body?.string().orEmpty()
             }
-        }.getOrNull()
+        } catch (e: IOException) {
+            throw HermesTransportException(
+                "Could not reach ${profile.baseUrl} to check sign-in: " +
+                    (e.message ?: e::class.java.simpleName),
+            )
+        }
+
+        val root = runCatching { HermesJson.parseToJsonElement(body).objOrNull() }.getOrNull()
+            ?: throw HermesTransportException(
+                "${profile.baseUrl} did not answer with a provider list (unexpected reply shape).",
+            )
+        val providers = root["providers"]?.arrOrNull() ?: return null
+        return providers.mapNotNull { it.objOrNull() }
+            .firstOrNull { it.str("supports_password")?.equals("true", ignoreCase = true) == true }
+            ?.str("name")
     }
 
     private fun classify(profile: ServerProfile, error: Throwable): ConnectionStatus.Failed {
