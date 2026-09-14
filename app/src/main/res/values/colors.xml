@@ -2,6 +2,6 @@
 <resources>
     <color name="splash_background">#0E1020</color>
     <color name="ic_launcher_background">#0E1020</color>
-    <color name="brand_gold">#FFC24B</color>
-    <color name="brand_indigo">#2A2E5C</color>
+    <color name="brand_gold">#F5C24B</color>
+    <color name="brand_indigo">#4F5488</color>
 </resources>

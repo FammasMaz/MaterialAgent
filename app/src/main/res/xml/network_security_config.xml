@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A self-hosted Hermes gateway is reached over plain HTTP: on loopback through an
+  SSH tunnel, or at a LAN address like http://192.168.1.27:9119. The app cannot
+  know a user's host in advance, so cleartext is permitted app-wide rather than
+  allow-listed per domain, and certificates still come from the system store so
+  HTTPS servers are verified normally.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

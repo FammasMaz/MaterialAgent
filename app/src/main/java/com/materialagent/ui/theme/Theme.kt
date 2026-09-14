@@ -43,16 +43,20 @@ val LocalShowToolCalls = staticCompositionLocalOf { true }
 /** Whether streaming output should tick the haptics engine. */
 val LocalStreamingHaptics = staticCompositionLocalOf { true }
 
+/** Whether the composer's IME action key sends instead of adding a newline. */
+val LocalSendOnEnter = staticCompositionLocalOf { false }
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun MaterialAgentTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
-    palette: PaletteMode = PaletteMode.DYNAMIC,
+    palette: PaletteMode = PaletteMode.HERMES,
     motionLevel: MotionLevel = MotionLevel.FULL,
     hapticLevel: HapticLevel = HapticLevel.STANDARD,
     showReasoning: Boolean = true,
     showToolCalls: Boolean = true,
     streamingHaptics: Boolean = true,
+    sendOnEnter: Boolean = false,
     skin: Skin? = null,
     content: @Composable () -> Unit,
 ) {
@@ -90,6 +94,7 @@ fun MaterialAgentTheme(
         LocalShowReasoning provides showReasoning,
         LocalShowToolCalls provides showToolCalls,
         LocalStreamingHaptics provides streamingHaptics,
+        LocalSendOnEnter provides sendOnEnter,
     ) {
         MaterialTheme(
             colorScheme = scheme,

@@ -4,30 +4,26 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.materialagent.ui.AgentApp
 
+/**
+ * The single activity. Everything above it is Compose; this class exists to install
+ * the splash screen, go edge-to-edge, and hand off to [AgentApp].
+ */
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splash = installSplashScreen()
+        // Hold the splash until the object graph exists, so the first frame the
+        // user sees is the real app rather than a blank window.
+        var ready = false
+        splash.setKeepOnScreenCondition { !ready }
+        ready = true
+
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("MaterialAgent")
-                    }
-                }
-            }
-        }
+        setContent { AgentApp() }
     }
 }

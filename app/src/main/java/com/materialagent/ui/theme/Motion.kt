@@ -62,6 +62,9 @@ object ExpressiveMotion {
         val scale: SpringSpec<Float> = Spatial.press()
         val alpha: SpringSpec<Float> = Effects.alpha()
         val bubbleSize: SpringSpec<Float> = Spatial.size()
+
+        /** For `animateContentSize`, which animates an [IntSize], not a Float. */
+        val contentSize: SpringSpec<androidx.compose.ui.unit.IntSize> = Spatial.size()
         val playful: SpringSpec<Float> = Spatial.playful()
         val cornerRadius: SpringSpec<Dp> = Spatial.shape()
         val elevation: SpringSpec<Dp> = Effects.elevation()

@@ -54,16 +54,19 @@ class SettingsStore(context: Context) {
     }
 
     val settings: Flow<AppSettings> = store.data.map { prefs ->
+        // Fallbacks come from the model's own defaults, never from a second copy
+        // of them here: a duplicated default silently wins over the real one.
+        val d = AppSettings()
         AppSettings(
-            themeMode = prefs[THEME_MODE].toEnum(ThemeMode.SYSTEM),
-            palette = prefs[PALETTE].toEnum(PaletteMode.DYNAMIC),
-            motionLevel = prefs[MOTION].toEnum(MotionLevel.FULL),
-            hapticLevel = prefs[HAPTICS].toEnum(HapticLevel.STANDARD),
-            showReasoning = prefs[SHOW_REASONING] ?: true,
-            showToolCalls = prefs[SHOW_TOOLS] ?: true,
-            streamingHaptics = prefs[STREAMING_HAPTICS] ?: true,
-            sendOnEnter = prefs[SEND_ON_ENTER] ?: false,
-            activeProfileId = prefs[ACTIVE_PROFILE],
+            themeMode = prefs[THEME_MODE].toEnum(d.themeMode),
+            palette = prefs[PALETTE].toEnum(d.palette),
+            motionLevel = prefs[MOTION].toEnum(d.motionLevel),
+            hapticLevel = prefs[HAPTICS].toEnum(d.hapticLevel),
+            showReasoning = prefs[SHOW_REASONING] ?: d.showReasoning,
+            showToolCalls = prefs[SHOW_TOOLS] ?: d.showToolCalls,
+            streamingHaptics = prefs[STREAMING_HAPTICS] ?: d.streamingHaptics,
+            sendOnEnter = prefs[SEND_ON_ENTER] ?: d.sendOnEnter,
+            activeProfileId = prefs[ACTIVE_PROFILE] ?: d.activeProfileId,
         )
     }
 

@@ -10,6 +10,9 @@ import com.materialagent.core.objOrNull
 import com.materialagent.core.str
 import com.materialagent.core.model.Skin
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketTimeoutException
+import java.net.UnknownServiceException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -70,12 +73,17 @@ class HermesConnection(
 
     suspend fun activate(profile: ServerProfile): ConnectionStatus {
         intentionalStop = false
-        reconnectJob?.cancel()
+        stopWatcher()
         activeProfile = profile
         _status.value = ConnectionStatus.Connecting(profile)
-        return runCatching { dial(profile, isRetry = false) }
+        return runCatching { dial(profile) }
             .fold(
-                onSuccess = { ConnectionStatus.Connected(profile) },
+                onSuccess = {
+                    val connected = ConnectionStatus.Connected(profile)
+                    _status.value = connected
+                    startWatcher(profile)
+                    connected
+                },
                 onFailure = { error ->
                     val failure = classify(profile, error)
                     _status.value = failure
@@ -86,8 +94,7 @@ class HermesConnection(
 
     fun deactivate() {
         intentionalStop = true
-        reconnectJob?.cancel()
-        reconnectJob = null
+        stopWatcher()
         activeProfile = null
         _handshakeComplete.value = false
         client.disconnect("user disconnected")
@@ -98,32 +105,40 @@ class HermesConnection(
     fun retry() {
         val profile = activeProfile ?: return
         intentionalStop = false
-        reconnectJob?.cancel()
+        stopWatcher()
         reconnectJob = scope.launch {
             _status.value = ConnectionStatus.Connecting(profile)
-            val result = runCatching { dial(profile, isRetry = true) }
-            if (result.isFailure) {
-                _status.value = classify(profile, result.exceptionOrNull()!!)
-            } else {
-                _status.value = ConnectionStatus.Connected(profile)
-            }
+            runCatching { dial(profile) }.fold(
+                onSuccess = {
+                    _status.value = ConnectionStatus.Connected(profile)
+                    startWatcher(profile)
+                },
+                onFailure = { _status.value = classify(profile, it) },
+            )
         }
     }
 
-    private suspend fun dial(profile: ServerProfile, isRetry: Boolean) {
+    /**
+     * Opens the socket and completes the handshake. Deliberately does *not* start
+     * the drop watcher: [startWatcher] owns that job, and a redial from inside the
+     * watcher must not cancel the watcher that is running it.
+     */
+    private suspend fun dial(profile: ServerProfile) {
         val authParam = resolveAuth(profile)
         val wsUrl = HermesUrl.wsUrl(profile.baseUrl, authParam, profile.profileName)
             ?: throw HermesTransportException("Not a valid server address: ${profile.baseUrl}")
 
         client.connect(wsUrl)
         _handshakeComplete.value = true
-
-        // Watch for unexpected drops and take over reconnection from here.
-        watchForDrops(profile)
     }
 
-    private fun watchForDrops(profile: ServerProfile) {
+    private fun stopWatcher() {
         reconnectJob?.cancel()
+        reconnectJob = null
+    }
+
+    private fun startWatcher(profile: ServerProfile) {
+        stopWatcher()
         reconnectJob = scope.launch {
             var attempt = 0
             while (!intentionalStop && activeProfile?.id == profile.id) {
@@ -146,7 +161,7 @@ class HermesConnection(
                         .coerceAtMost(MAX_BACKOFF_MS)
                     delay(backoff)
                     if (intentionalStop || activeProfile?.id != profile.id) return@launch
-                    val ok = runCatching { dial(profile, isRetry = true) }.isSuccess
+                    val ok = runCatching { dial(profile) }.isSuccess
                     if (ok) {
                         attempt = 0
                         _status.value = ConnectionStatus.Connected(profile)
@@ -254,7 +269,21 @@ class HermesConnection(
     }
 
     private fun classify(profile: ServerProfile, error: Throwable): ConnectionStatus.Failed {
+        // Order matters: these are all IOExceptions, and the specific ones say
+        // something far more useful than "could not reach".
         val message = when (error) {
+            is UnknownServiceException ->
+                "Android blocked plain HTTP to ${profile.baseUrl}. The network security " +
+                    "configuration must permit cleartext for this build."
+
+            is SocketTimeoutException ->
+                "${profile.baseUrl} did not answer in time. Is the host awake and the " +
+                    "port reachable from this network?"
+
+            is ConnectException ->
+                "Nothing is listening at ${profile.baseUrl}. Start `hermes serve` there, " +
+                    "or check the port and any tunnel."
+
             is IOException -> "Could not reach ${profile.baseUrl}. Is `hermes serve` running?"
             else -> error.message ?: "Connection failed"
         }

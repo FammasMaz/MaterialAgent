@@ -1,0 +1,540 @@
+package com.materialagent.ui.screens.sessions
+
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.materialagent.core.model.SessionSummary
+import com.materialagent.data.ConnectionStatus
+import com.materialagent.data.HapticCue
+import com.materialagent.ui.AgentViewModel
+import com.materialagent.ui.containerViewModel
+import com.materialagent.ui.components.AgentOrb
+import com.materialagent.ui.components.EmptyState
+import com.materialagent.ui.components.ErrorBanner
+import com.materialagent.ui.components.LoadingBlock
+import com.materialagent.ui.components.LivePulse
+import com.materialagent.ui.components.MetaPill
+import com.materialagent.ui.rememberCue
+import com.materialagent.ui.theme.ExpressiveMotion
+import java.text.DateFormat
+import java.util.Date
+import java.util.concurrent.TimeUnit
+
+/**
+ * The home screen: every durable conversation the server knows about.
+ *
+ * The list is a pure function of the server's catalogue plus a local query, so it
+ * stays correct when the agent renames a conversation mid-turn — the refresh is
+ * driven by the gateway's `sessions.changed` events, not by the user pulling.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SessionsScreen(
+    app: AgentViewModel,
+    onOpenSession: (String) -> Unit,
+    onNewConversation: () -> Unit,
+    onConnect: () -> Unit,
+) {
+    val viewModel = containerViewModel { SessionsViewModel(it) }
+    val cue = rememberCue()
+    val sessions by viewModel.sessions.collectAsStateWithLifecycle()
+    val loading by viewModel.loading.collectAsStateWithLifecycle()
+    val query by viewModel.query.collectAsStateWithLifecycle()
+    val filter by viewModel.filter.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+    val actionError by viewModel.actionError.collectAsStateWithLifecycle()
+    val busyId by viewModel.busyId.collectAsStateWithLifecycle()
+    val status by app.status.collectAsStateWithLifecycle()
+
+    var renaming by remember { mutableStateOf<SessionSummary?>(null) }
+    var deleting by remember { mutableStateOf<SessionSummary?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(loading) {
+        if (refreshing && !loading) refreshing = false
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                cue(HapticCue.SENT)
+                viewModel.refresh()
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    // Clear the floating navigation bar.
+                    bottom = 120.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                item {
+                    Column(modifier = Modifier.statusBarsPadding()) {
+                        Spacer(Modifier.height(12.dp))
+                        HeaderRow(
+                            connectedName = (status as? ConnectionStatus.Connected)?.profile?.name,
+                            status = status,
+                            onConnect = onConnect,
+                            onRetry = app::retry,
+                        )
+                        Spacer(Modifier.height(14.dp))
+                        SearchField(
+                            query = query,
+                            onQueryChange = viewModel::search,
+                            onClear = viewModel::clearSearch,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(
+                                selected = filter == SessionFilter.ALL,
+                                onClick = { viewModel.filterBy(SessionFilter.ALL) },
+                                label = { Text("All") },
+                                shape = RoundedCornerShape(50),
+                            )
+                            FilterChip(
+                                selected = filter == SessionFilter.MINE,
+                                onClick = { viewModel.filterBy(SessionFilter.MINE) },
+                                label = { Text("Conversations") },
+                                shape = RoundedCornerShape(50),
+                            )
+                            FilterChip(
+                                selected = filter == SessionFilter.AUTOMATIONS,
+                                onClick = { viewModel.filterBy(SessionFilter.AUTOMATIONS) },
+                                label = { Text("Automations") },
+                                shape = RoundedCornerShape(50),
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+
+                // A list error is only meaningful once we have a connection; when the
+                // gateway is down the empty state already says what to do about it.
+                if (error != null && status is ConnectionStatus.Connected) {
+                    item {
+                        ErrorBanner(
+                            message = error!!,
+                            onDismiss = { viewModel.dismissError() },
+                            onRetry = viewModel::refresh,
+                        )
+                    }
+                }
+                if (actionError != null) {
+                    item {
+                        ErrorBanner(
+                            message = actionError!!,
+                            onDismiss = { viewModel.dismissError() },
+                        )
+                    }
+                }
+
+                when {
+                    loading && sessions.isEmpty() -> item {
+                        LoadingBlock("Reading the server's conversations…")
+                    }
+
+                    sessions.isEmpty() && query.isBlank() -> item {
+                        EmptyState(
+                            title = if (filter == SessionFilter.AUTOMATIONS) {
+                                "No automations yet"
+                            } else {
+                                "Nothing here yet"
+                            },
+                            body = if (status is ConnectionStatus.Connected) {
+                                "Start a conversation and your agent will pick up from a " +
+                                    "clean slate — your workspace, its tools, no history."
+                            } else {
+                                "Connect to your Hermes server to see conversations and talk " +
+                                    "to your agent."
+                            },
+                            actionLabel = "New conversation",
+                            onAction = {
+                                cue(HapticCue.TURN_START)
+                                onNewConversation()
+                            },
+                            secondaryActionLabel = "Server settings",
+                            onSecondaryAction = onConnect,
+                        )
+                    }
+
+                    sessions.isEmpty() -> item {
+                        EmptyState(
+                            title = "No matches",
+                            body = "No conversation matches “$query”.",
+                            actionLabel = "Clear search",
+                            onAction = viewModel::clearSearch,
+                        )
+                    }
+
+                    else -> items(sessions, key = { it.id }) { session ->
+                        SessionCard(
+                            session = session,
+                            busy = busyId == session.id,
+                            onOpen = {
+                                cue(HapticCue.SENT)
+                                onOpenSession(session.id)
+                            },
+                            onRename = {
+                                cue(HapticCue.TOOL_START)
+                                renaming = session
+                            },
+                            onDelete = {
+                                cue(HapticCue.NEEDS_ATTENTION)
+                                deleting = session
+                            },
+                            onBranch = {
+                                cue(HapticCue.TOOL_START)
+                                viewModel.branch(session.id) { newId ->
+                                    onOpenSession(newId)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    renaming?.let { session ->
+        RenameDialog(
+            initial = session.title,
+            onDismiss = { renaming = null },
+            onConfirm = { title ->
+                viewModel.rename(session.id, title)
+                renaming = null
+            },
+        )
+    }
+
+    deleting?.let { session ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete this conversation?") },
+            text = {
+                Text(
+                    "“${session.title}” and its ${session.messageCount} messages will be " +
+                        "removed from the server. This cannot be undone.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    cue(HapticCue.TURN_FAILED)
+                    viewModel.delete(session.id)
+                    deleting = null
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text("Keep") }
+            },
+            icon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
+        )
+    }
+}
+
+@Composable
+private fun HeaderRow(
+    connectedName: String?,
+    status: ConnectionStatus,
+    onConnect: () -> Unit,
+    onRetry: () -> Unit,
+) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Sessions",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    when (status) {
+                        is ConnectionStatus.Connected -> {
+                            LivePulse()
+                            Text(
+                                text = connectedName ?: "Connected",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                        is ConnectionStatus.Connecting -> Text(
+                            text = "Connecting to ${status.profile.name}…",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        is ConnectionStatus.Reconnecting -> Text(
+                            text = "Reconnecting (attempt ${status.attempt})…",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        is ConnectionStatus.Failed -> {
+                            Text(
+                                text = status.message,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.error,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+
+                        ConnectionStatus.Idle -> {
+                            TextButton(onClick = onConnect) { Text("Connect a server") }
+                        }
+                    }
+                }
+            }
+            if (status is ConnectionStatus.Failed) {
+                TextButton(onClick = onRetry) { Text("Retry") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text("Search conversations") },
+        singleLine = true,
+        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                }
+            }
+        },
+        shape = RoundedCornerShape(50),
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun SessionCard(
+    session: SessionSummary,
+    busy: Boolean,
+    onOpen: () -> Unit,
+    onRename: () -> Unit,
+    onDelete: () -> Unit,
+    onBranch: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val dim by animateFloatAsState(
+        targetValue = if (busy) 0.5f else 1f,
+        animationSpec = ExpressiveMotion.Specs.alpha,
+        label = "busyDim",
+    )
+    val container by animateColorAsState(
+        targetValue = MaterialTheme.colorScheme.surfaceContainer,
+        animationSpec = ExpressiveMotion.Specs.color,
+        label = "cardContainer",
+    )
+
+    Surface(
+        onClick = onOpen,
+        enabled = !busy,
+        shape = RoundedCornerShape(24.dp),
+        color = container,
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(dim),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            if (session.isAutomation) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            } else {
+                AgentOrb(size = 38.dp, active = false)
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = session.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (session.preview.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = session.preview.replace('\n', ' '),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MetaPill(text = relativeTime(session.startedAt))
+                    if (session.messageCount > 0) {
+                        MetaPill(text = "${session.messageCount} messages")
+                    }
+                    if (session.isAutomation) MetaPill(text = "Automation")
+                }
+            }
+
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "Conversation actions")
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onRename()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Branch from here") },
+                        leadingIcon = { Icon(Icons.Rounded.Wifi, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onBranch()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenameDialog(
+    initial: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var text by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename conversation") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Title") },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(text.trim()) },
+                enabled = text.isNotBlank(),
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        icon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+    )
+}
+
+/** Human-friendly age. Minutes and hours matter far more than exact stamps here. */
+internal fun relativeTime(epochSeconds: Double): String {
+    if (epochSeconds <= 0.0) return "No date"
+    val millis = (epochSeconds * 1000).toLong()
+    val delta = System.currentTimeMillis() - millis
+    return when {
+        delta < TimeUnit.MINUTES.toMillis(1) -> "Just now"
+        delta < TimeUnit.HOURS.toMillis(1) -> "${TimeUnit.MILLISECONDS.toMinutes(delta)}m ago"
+        delta < TimeUnit.DAYS.toMillis(1) -> "${TimeUnit.MILLISECONDS.toHours(delta)}h ago"
+        delta < TimeUnit.DAYS.toMillis(7) -> "${TimeUnit.MILLISECONDS.toDays(delta)}d ago"
+        else -> DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis))
+    }
+}

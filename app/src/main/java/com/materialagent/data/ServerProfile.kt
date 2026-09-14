@@ -33,7 +33,8 @@ enum class HapticLevel { OFF, SUBTLE, STANDARD, STRONG }
 
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val palette: PaletteMode = PaletteMode.DYNAMIC,
+    // The app has its own identity; dynamic colour is an opt-in, not the default.
+    val palette: PaletteMode = PaletteMode.HERMES,
     val motionLevel: MotionLevel = MotionLevel.FULL,
     val hapticLevel: HapticLevel = HapticLevel.STANDARD,
     val showReasoning: Boolean = true,
