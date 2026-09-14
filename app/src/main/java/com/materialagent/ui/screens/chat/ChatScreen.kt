@@ -53,6 +53,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -97,11 +98,14 @@ import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.MetaPill
+import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.components.NoticeBanner
 import com.materialagent.ui.containerViewModel
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
 import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.cornerRadiusSpec
+import com.materialagent.ui.theme.placementSpec
 import com.materialagent.ui.theme.LocalShowReasoning
 import com.materialagent.ui.theme.LocalShowToolCalls
 import com.materialagent.ui.theme.LocalStreamingHaptics
@@ -280,20 +284,14 @@ fun ChatScreen(
                             item(key = entry.id) {
                                 Box(
                                     modifier = Modifier.animateItem(
-                                        fadeInSpec = spring(
-                                            dampingRatio = 1f,
-                                            stiffness = Spring.StiffnessMediumLow,
-                                        ),
+                                        fadeInSpec = ExpressiveMotion.Specs.alpha,
                                         // A streaming row changes height on almost every
                                         // frame; animating its placement fights the
                                         // auto-scroll and reads as vertical jitter.
                                         placementSpec = if (entry.isStreaming) {
                                             null
                                         } else {
-                                            spring(
-                                                dampingRatio = 1f,
-                                                stiffness = Spring.StiffnessMediumLow,
-                                            )
+                                            placementSpec()
                                         },
                                         // Instant removal, so a regenerated turn never
                                         // leaves a ghost of its old text behind.
@@ -579,19 +577,14 @@ private fun Composer(
     val sendOnEnter = LocalSendOnEnter.current
 
     val targetShape = when {
-        steering -> 20.dp
-        running -> 20.dp
-        else -> 26.dp
+        steering -> AgentShapes.composerActive
+        running -> AgentShapes.composerActive
+        else -> AgentShapes.composerIdle
     }
     val shape by animateDpAsState(
         targetValue = targetShape,
-        animationSpec = ExpressiveMotion.Specs.cornerRadius,
+        animationSpec = cornerRadiusSpec(),
         label = "composerShape",
-    )
-    val container by animateColorAsState(
-        targetValue = MaterialTheme.colorScheme.surfaceContainerHigh,
-        animationSpec = ExpressiveMotion.Specs.color,
-        label = "composerContainer",
     )
 
     Surface(
@@ -605,7 +598,7 @@ private fun Composer(
             bottomStart = shape,
             bottomEnd = shape,
         ),
-        color = container,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 2.dp,
     ) {
         Row(
@@ -673,7 +666,7 @@ private fun Composer(
                     ComposerAction.STEER -> Button(
                         onClick = onSteer,
                         shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.height(48.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
                         Icon(Icons.Rounded.AltRoute, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
@@ -703,7 +696,7 @@ private data class ModelChoice(
 )
 
 /** Models, reasoning effort and the fast tier — all per session. */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ModelPickerSheet(
     providers: List<ProviderInfo>,
@@ -717,14 +710,17 @@ private fun ModelPickerSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        // One horizontal inset for the whole sheet. Children used to add their
+        // own (12dp, then 8dp on the search box), so the title, the model rows
+        // and the search field each started at a different left edge.
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(
                 text = "Model",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.padding(vertical = 8.dp),
             )
 
             if (providers.isEmpty()) {
@@ -732,7 +728,7 @@ private fun ModelPickerSheet(
                     text = "No models reported. Pull the server's capabilities from the Agent tab.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
             }
 
@@ -779,7 +775,7 @@ private fun ModelPickerSheet(
                 shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                    .padding(vertical = 4.dp),
             )
 
             if (shown.isEmpty()) {
@@ -787,13 +783,18 @@ private fun ModelPickerSheet(
                     text = "No model matches \"$query\".",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
                 )
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(shown, key = { it.qualified }) { choice ->
                         ListItem(
-                            headlineContent = { Text(choice.model) },
+                            // The clickable overload, not a hand-rolled
+                            // `Modifier.clickable`: this one brings the M3 row's
+                            // own ripple, minimum height and semantics — and it is
+                            // the only overload that accepts `contentPadding`. Its
+                            // headline is the trailing `content` slot.
+                            onClick = { onPick(choice.qualified) },
                             supportingContent = { Text(choice.provider) },
                             trailingContent = {
                                 if (current == choice.model || current == choice.qualified) {
@@ -804,8 +805,13 @@ private fun ModelPickerSheet(
                                     )
                                 }
                             },
-                            modifier = Modifier.clickable { onPick(choice.qualified) },
-                        )
+                            // Zero horizontal padding: the default 16dp would put
+                            // the rows 16dp right of every other row in the sheet,
+                            // which already sits in a 16dp column.
+                            contentPadding = PaddingValues(horizontal = 0.dp),
+                        ) {
+                            Text(choice.model)
+                        }
                     }
                 }
                 if (matches.size > shown.size) {
@@ -813,7 +819,7 @@ private fun ModelPickerSheet(
                         text = "Showing ${shown.size} of ${matches.size} — keep typing to narrow.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(vertical = 4.dp),
                     )
                 }
             }
@@ -821,12 +827,12 @@ private fun ModelPickerSheet(
             Text(
                 text = "Reasoning",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.padding(vertical = 8.dp),
             )
             Row(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp),
+                    .padding(vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // "max" is a real level on this server and was missing here, so a
@@ -854,7 +860,7 @@ private fun ModelPickerSheet(
 
             TextButton(
                 onClick = { onFast(!fastEnabled) },
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                modifier = Modifier.padding(vertical = 8.dp),
             ) {
                 Text(if (fastEnabled) "Fast tier: on" else "Fast tier: off")
             }

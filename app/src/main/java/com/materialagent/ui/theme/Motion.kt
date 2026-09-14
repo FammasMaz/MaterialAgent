@@ -124,5 +124,6 @@ fun contentSizeSpec(): SpringSpec<IntSize> = motionFor(LocalMotionLevel.current,
 @Composable
 fun cornerRadiusSpec(): SpringSpec<Dp> = motionFor(LocalMotionLevel.current, spatial = true)
 
+/** Position changes (`Modifier.animateItem`, offsets) — spatial, so preference-aware. */
 @Composable
-fun placementSpec(): SpringSpec<Float> = motionFor(LocalMotionLevel.current, spatial = true)
+fun <T> placementSpec(): SpringSpec<T> = motionFor(LocalMotionLevel.current, spatial = true)

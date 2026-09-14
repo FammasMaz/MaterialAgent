@@ -25,7 +25,15 @@ object AgentShapes {
     val bubbleTail = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 22.dp, bottomStart = 6.dp)
     val bubbleTailEnd = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp, bottomEnd = 6.dp, bottomStart = 22.dp)
     val bubbleFull = RoundedCornerShape(22.dp)
-    val composer = RoundedCornerShape(28.dp)
-    val sheet = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
     val toolCard = RoundedCornerShape(18.dp)
+
+    /**
+     * The composer's radius, animated between these two: tight while a turn is
+     * live so the send/steer/stop button sits close to the text, roomier when
+     * idle. Dp values rather than shapes because `animateDpAsState` needs a
+     * number, and they are a pair — changing one alone makes the morph look
+     * accidental.
+     */
+    val composerActive = 20.dp
+    val composerIdle = 26.dp
 }
