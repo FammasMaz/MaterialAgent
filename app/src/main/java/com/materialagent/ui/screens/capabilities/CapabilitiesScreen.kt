@@ -34,9 +34,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -56,6 +53,7 @@ import com.materialagent.core.str
 import com.materialagent.data.ConnectionStatus
 import com.materialagent.data.HapticCue
 import com.materialagent.ui.AgentViewModel
+import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
@@ -133,21 +131,15 @@ fun CapabilitiesScreen(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    CapabilityTab.entries.forEachIndexed { index, entry ->
-                        SegmentedButton(
-                            selected = tab == entry,
-                            onClick = {
-                                cue(HapticCue.SENT)
-                                tab = entry
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = CapabilityTab.entries.size,
-                            ),
-                        ) { Text(entry.label) }
-                    }
-                }
+                ExpressiveToggleGroup(
+                    options = CapabilityTab.entries.map { it.label },
+                    selectedIndex = CapabilityTab.entries.indexOf(tab),
+                    onSelect = { index ->
+                        cue(HapticCue.SENT)
+                        tab = CapabilityTab.entries[index]
+                    },
+                    fillWidth = true,
+                )
                 Spacer(Modifier.height(6.dp))
             }
         }

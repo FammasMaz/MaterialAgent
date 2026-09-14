@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
@@ -30,7 +30,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +61,7 @@ import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.LivePulse
 import com.materialagent.ui.components.MetaPill
+import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
 import java.text.DateFormat
@@ -139,26 +139,14 @@ fun SessionsScreen(
                             onClear = viewModel::clearSearch,
                         )
                         Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(
-                                selected = filter == SessionFilter.ALL,
-                                onClick = { viewModel.filterBy(SessionFilter.ALL) },
-                                label = { Text("All") },
-                                shape = RoundedCornerShape(50),
-                            )
-                            FilterChip(
-                                selected = filter == SessionFilter.MINE,
-                                onClick = { viewModel.filterBy(SessionFilter.MINE) },
-                                label = { Text("Conversations") },
-                                shape = RoundedCornerShape(50),
-                            )
-                            FilterChip(
-                                selected = filter == SessionFilter.AUTOMATIONS,
-                                onClick = { viewModel.filterBy(SessionFilter.AUTOMATIONS) },
-                                label = { Text("Automations") },
-                                shape = RoundedCornerShape(50),
-                            )
-                        }
+                        ExpressiveToggleGroup(
+                            options = SessionFilter.entries.map { it.label },
+                            selectedIndex = SessionFilter.entries.indexOf(filter),
+                            onSelect = { index ->
+                                cue(HapticCue.SENT)
+                                viewModel.filterBy(SessionFilter.entries[index])
+                            },
+                        )
                         Spacer(Modifier.height(6.dp))
                     }
                 }

@@ -35,9 +35,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -59,6 +56,7 @@ import com.materialagent.data.MotionLevel
 import com.materialagent.data.PaletteMode
 import com.materialagent.data.ThemeMode
 import com.materialagent.ui.AgentViewModel
+import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.AgentMark
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
@@ -542,22 +540,18 @@ private fun SwitchRow(
     }
 }
 
-/** A compact segmented control used for every enumerated preference. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** A compact expressive selector used for every enumerated preference. */
 @Composable
 private fun ChoiceRow(
     options: List<Pair<String, Boolean>>,
     onSelect: (Int) -> Unit,
 ) {
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        options.forEachIndexed { index, (label, selected) ->
-            SegmentedButton(
-                selected = selected,
-                onClick = { onSelect(index) },
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-            ) { Text(label, maxLines = 1) }
-        }
-    }
+    ExpressiveToggleGroup(
+        options = options.map { it.first },
+        selectedIndex = options.indexOfFirst { it.second }.coerceAtLeast(0),
+        onSelect = onSelect,
+        fillWidth = true,
+    )
 }
 
 private fun Modifier.clickableRowCompat(onClick: () -> Unit): Modifier =

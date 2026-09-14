@@ -13,13 +13,17 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** How the sessions list is currently filtered. */
-enum class SessionFilter { ALL, MINE, AUTOMATIONS }
+enum class SessionFilter(val label: String) {
+    ALL("All"),
+    MINE("Conversations"),
+    AUTOMATIONS("Automations"),
+}
 
 /**
  * Backs the sessions list.
  *
  * The list itself is server-owned and shared through [AppContainer.sessions], so
- * this class only adds the view concerns: the search query, the filter chip, and
+ * this class only adds the view concerns: the search query, the filter, and
  * a place to surface a failed rename/delete without hijacking the whole screen.
  */
 class SessionsViewModel(private val container: AppContainer) : ViewModel() {
