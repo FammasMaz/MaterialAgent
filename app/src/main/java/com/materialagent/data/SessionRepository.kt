@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
@@ -67,6 +68,7 @@ class SessionRepository(
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
     private var watcher: Job? = null
+    private var statusWatcher: Job? = null
 
     /** Starts reacting to server-side list changes. Safe to call repeatedly. */
     fun start() {
@@ -75,6 +77,20 @@ class SessionRepository(
             connection.events
                 .filter { it.type == GatewayEvent.SESSIONS_CHANGED || it.type == GatewayEvent.SESSION_RECLAIMED }
                 .debounce(700)
+                .collect { refresh() }
+        }
+        // Reload the inbox whenever the connection comes up.
+        //
+        // Without this, a refresh issued while the socket is still dialling fails
+        // with "Gateway not connected" — and nothing tried again. Launch, Retry and
+        // returning from the background all end the same way: an empty list under a
+        // connection error, which reads as "the connection keeps dropping" even
+        // though the socket is fine a moment later. The list is cheap to reload and
+        // is the app's whole front page, so it reloads itself.
+        statusWatcher = scope.launch {
+            connection.status
+                .filter { it is ConnectionStatus.Connected }
+                .distinctUntilChanged()
                 .collect { refresh() }
         }
     }

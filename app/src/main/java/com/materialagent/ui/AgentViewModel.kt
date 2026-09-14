@@ -123,6 +123,17 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
         container.connection.retry()
     }
 
+    /**
+     * Re-checks the connection when the app comes back from the background.
+     *
+     * Android freezes a backgrounded process, which stops the WebSocket
+     * heartbeat; the gateway drops a client that goes quiet, so by the time the
+     * user returns the socket is usually already dead on the far end.
+     */
+    fun onForeground() {
+        container.connection.onForeground()
+    }
+
     fun disconnect() = container.connection.deactivate()
 
     fun forget(profile: ServerProfile) {

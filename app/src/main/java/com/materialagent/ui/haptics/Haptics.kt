@@ -62,6 +62,11 @@ class Haptics(context: Context) {
             // Very light: the agent is alive and producing tokens.
             HapticCue.STREAM_TICK -> effect(s * 0.45f, listOf(0L))
 
+            // The lightest pulse the motor can produce, and the one that fires
+            // most often: a list being scrolled. Anything heavier turns a flick
+            // through a long transcript into a rattle.
+            HapticCue.SCROLL_TICK -> effect(s * 0.22f, listOf(0L))
+
             HapticCue.TURN_START -> effect(s * 0.7f, listOf(0L))
 
             // A rising double-tap: work has begun on the user's behalf.

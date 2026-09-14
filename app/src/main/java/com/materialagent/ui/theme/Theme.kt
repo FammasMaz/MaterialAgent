@@ -43,6 +43,13 @@ val LocalShowToolCalls = staticCompositionLocalOf { true }
 /** Whether streaming output should tick the haptics engine. */
 val LocalStreamingHaptics = staticCompositionLocalOf { true }
 
+/**
+ * Whether a scroll tick fires while lists move. Its own setting, separate from
+ * [LocalStreamingHaptics]: a tick under the finger every few millimetres is a
+ * matter of taste, and a user can reasonably want one and not the other.
+ */
+val LocalScrollHaptics = staticCompositionLocalOf { true }
+
 /** Whether the composer's IME action key sends instead of adding a newline. */
 val LocalSendOnEnter = staticCompositionLocalOf { false }
 
@@ -56,6 +63,7 @@ fun MaterialAgentTheme(
     showReasoning: Boolean = true,
     showToolCalls: Boolean = true,
     streamingHaptics: Boolean = true,
+    scrollHaptics: Boolean = true,
     sendOnEnter: Boolean = false,
     skin: Skin? = null,
     content: @Composable () -> Unit,
@@ -94,6 +102,7 @@ fun MaterialAgentTheme(
         LocalShowReasoning provides showReasoning,
         LocalShowToolCalls provides showToolCalls,
         LocalStreamingHaptics provides streamingHaptics,
+        LocalScrollHaptics provides scrollHaptics,
         LocalSendOnEnter provides sendOnEnter,
     ) {
         MaterialTheme(

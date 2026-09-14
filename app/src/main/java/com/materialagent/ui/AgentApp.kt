@@ -81,6 +81,7 @@ fun AgentApp() {
         showReasoning = settings.showReasoning,
         showToolCalls = settings.showToolCalls,
         streamingHaptics = settings.streamingHaptics,
+        scrollHaptics = settings.scrollHaptics,
         sendOnEnter = settings.sendOnEnter,
         skin = skin,
     ) {
@@ -97,6 +98,10 @@ fun AgentApp() {
         // permission round-trip comes back through.
         LaunchedEffect(Unit) { app.checkForUpdates() }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { app.onUpdatePermissionReturn() }
+        // Android freezes a backgrounded process, so the socket heartbeat stops and
+        // the gateway drops us. Re-check on the way back in, not on the first
+        // message the user tries to send.
+        LifecycleEventEffect(Lifecycle.Event.ON_START) { app.onForeground() }
 
         LaunchedEffect(loaded, profiles.size, settings.activeProfileId) {
             // No server, no inbox: send a first-time user straight to setup.

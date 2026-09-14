@@ -105,7 +105,9 @@ import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
 import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.cornerRadiusSpec
+import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.theme.placementSpec
+import com.materialagent.ui.theme.LocalScrollHaptics
 import com.materialagent.ui.theme.LocalShowReasoning
 import com.materialagent.ui.theme.LocalShowToolCalls
 import com.materialagent.ui.theme.LocalStreamingHaptics
@@ -141,6 +143,7 @@ fun ChatScreen(
     val showReasoning = LocalShowReasoning.current
     val showTools = LocalShowToolCalls.current
     val streamingHaptics = LocalStreamingHaptics.current
+    val scrollHaptics = LocalScrollHaptics.current
 
     // Keeps the screen pointed at whatever session the route names, including a
     // switch to a freshly branched sibling that lands on this same destination.
@@ -276,7 +279,11 @@ fun ChatScreen(
 
                     else -> LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            // Ticks under the finger, never for the auto-scroll that
+                            // follows a streaming answer.
+                            .scrollHaptics(scrollHaptics),
                         contentPadding = PaddingValues(top = 12.dp, bottom = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {

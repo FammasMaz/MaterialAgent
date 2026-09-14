@@ -1,12 +1,12 @@
 package com.materialagent.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -27,14 +27,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.materialagent.data.HapticCue
 import com.materialagent.ui.theme.ExpressiveMotion
-import com.materialagent.ui.theme.contentSizeSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
+import com.materialagent.ui.theme.placementSpec
 
 /** A top-level destination in the floating navigation bar. */
 data class AgentDestination(
@@ -98,6 +104,27 @@ fun AgentNavBar(
     )
 }
 
+private val LABEL_GAP = 8.dp
+
+/**
+ * How wide this destination's label is, measured once.
+ *
+ * Measuring up front is what lets the reveal be a single animated `Dp` instead
+ * of an animated *measured size*: the animation then has a known destination and
+ * never has to ask the text how big it is mid-flight.
+ */
+@Composable
+private fun rememberLabelWidth(label: String, showLabel: Boolean): Dp {
+    if (!showLabel) return 0.dp
+    val measurer = rememberTextMeasurer()
+    val style = MaterialTheme.typography.labelLarge
+    val density = LocalDensity.current
+    return remember(label, style, density, measurer) {
+        val widthPx = measurer.measure(AnnotatedString(label), style = style).size.width
+        with(density) { widthPx.toDp() }
+    }
+}
+
 @Composable
 private fun NavigationPill(
     destination: AgentDestination,
@@ -135,9 +162,7 @@ private fun NavigationPill(
 
     Surface(
         onClick = onClick,
-        modifier = Modifier
-            .pressScale(interaction)
-            .animateContentSize(animationSpec = contentSizeSpec()),
+        modifier = Modifier.pressScale(interaction),
         shape = RoundedCornerShape(50),
         color = container,
         contentColor = content,
@@ -162,12 +187,41 @@ private fun NavigationPill(
                 contentDescription = if (selected && showLabel) null else destination.label,
                 modifier = Modifier.size(iconSize),
             )
-            AnimatedVisibility(visible = selected && showLabel) {
-                Row {
-                    Spacer(Modifier.width(8.dp))
+            // The label is revealed by animating exactly one scalar — its width
+            // — instead of letting `animateContentSize` chase the pill's measured
+            // size. The old version had two size animations fighting over the same
+            // subtree (the pill's own, and an AnimatedVisibility nested inside it),
+            // with that subtree re-measured every frame and the whole Row re-laid
+            // out on top of it. Neighbouring pills visibly snapped sideways.
+            // One width, measured once from the text, keeps each frame to a single
+            // layout pass.
+            val labelWidth = rememberLabelWidth(destination.label, showLabel)
+            val reveal by animateDpAsState(
+                targetValue = if (selected && showLabel) labelWidth + LABEL_GAP else 0.dp,
+                animationSpec = placementSpec(),
+                label = "navLabelReveal",
+            )
+            val labelAlpha by animateFloatAsState(
+                targetValue = if (selected && showLabel) 1f else 0f,
+                animationSpec = ExpressiveMotion.Specs.alpha,
+                label = "navLabelAlpha",
+            )
+
+            Box(modifier = Modifier.width(reveal).clipToBounds()) {
+                Row(
+                    modifier = Modifier.alpha(labelAlpha),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Spacer(Modifier.width(LABEL_GAP))
                     Text(
                         text = destination.label,
                         style = MaterialTheme.typography.labelLarge,
+                        // Pinned to its measured width and denied wrapping, so a
+                        // half-revealed label is a clipped label rather than a
+                        // reflowed one.
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.width(labelWidth),
                     )
                 }
             }

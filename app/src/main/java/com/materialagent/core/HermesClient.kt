@@ -329,6 +329,28 @@ class HermesClient(
         }
     }
 
+    /**
+     * Re-checks liveness after the app comes back to the foreground.
+     *
+     * [startHeartbeat] is a coroutine parked on `delay`, and a backgrounded
+     * Android app is frozen: the process is not scheduled, so no ping goes out
+     * and the silence deadline above never gets to fire. The gateway, which is
+     * still watching for that ping, will have dropped us. So on resume the clock
+     * has to be read directly rather than trusting a heartbeat that was asleep —
+     * otherwise the socket reports OPEN while the far end has already let go, and
+     * the user only finds out when a message hangs.
+     */
+    fun checkLivenessOnForeground() {
+        if (socket == null) return
+        val silentFor = now() - lastInboundAt
+        if (silentFor >= HEARTBEAT_DEADLINE_MS) {
+            invalidate(
+                "Gateway went quiet while the app was in the background " +
+                    "(${silentFor / 1000}s of silence)",
+            )
+        }
+    }
+
     private fun failAllPending(error: Throwable) {
         pending.values.forEach { it.completeExceptionally(error) }
         pending.clear()

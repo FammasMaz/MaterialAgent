@@ -123,6 +123,29 @@ class HermesConnection(
     }
 
     /**
+     * Called when the app returns to the foreground.
+     *
+     * A frozen process cannot run the heartbeat, so the gateway may have dropped
+     * us while we were away even though the in-memory state still reads OPEN.
+     * Rather than let the user discover that by sending a message that hangs for
+     * two minutes, liveness is judged now and the socket is re-dialled before they
+     * touch anything. Reconnecting also replays the session's missed events, so an
+     * answer that arrived in the background is on screen when they get back.
+     */
+    fun onForeground() {
+        val profile = activeProfile ?: return
+        if (intentionalStop) return
+        client.checkLivenessOnForeground()
+        // Still genuinely open: leave it alone rather than flashing a reconnect
+        // banner at someone who simply switched apps and came back.
+        if (client.state.value == com.materialagent.core.ConnectionState.OPEN) return
+        retry()
+        if (_status.value is ConnectionStatus.Idle) {
+            _status.value = ConnectionStatus.Reconnecting(profile, 1)
+        }
+    }
+
+    /**
      * Opens the socket and completes the handshake. Deliberately does *not* start
      * the drop watcher: [startWatcher] owns that job, and a redial from inside the
      * watcher must not cancel the watcher that is running it.

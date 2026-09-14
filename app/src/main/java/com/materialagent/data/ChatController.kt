@@ -37,6 +37,7 @@ enum class HapticCue {
     TURN_FAILED,
     INTERRUPTED,
     SENT,
+    SCROLL_TICK,
 }
 
 /**

@@ -61,10 +61,12 @@ import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.MetaPill
+import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.containerViewModel
 import com.materialagent.ui.rememberCue
 import kotlinx.serialization.json.JsonObject
+import com.materialagent.ui.theme.LocalScrollHaptics
 
 /** What the agent on the other end can do — read-only, straight from the server. */
 private enum class CapabilityTab(val label: String) {
@@ -97,7 +99,9 @@ fun CapabilitiesScreen(
     val usageSnapshot = usage.info?.usage
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .scrollHaptics(LocalScrollHaptics.current),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

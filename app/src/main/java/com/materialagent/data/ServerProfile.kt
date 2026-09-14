@@ -40,6 +40,7 @@ data class AppSettings(
     val showReasoning: Boolean = true,
     val showToolCalls: Boolean = true,
     val streamingHaptics: Boolean = true,
+    val scrollHaptics: Boolean = true,
     val sendOnEnter: Boolean = false,
     val autoCheckUpdates: Boolean = true,
     // The version the user asked not to be told about again. Null, not "": the

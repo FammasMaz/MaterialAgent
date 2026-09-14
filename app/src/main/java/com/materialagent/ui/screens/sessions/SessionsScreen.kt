@@ -61,9 +61,11 @@ import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.LivePulse
 import com.materialagent.ui.components.MetaPill
+import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.LocalScrollHaptics
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -113,7 +115,9 @@ fun SessionsScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scrollHaptics(LocalScrollHaptics.current),
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,

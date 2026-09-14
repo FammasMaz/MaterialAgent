@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Brightness6
@@ -66,9 +67,11 @@ import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.components.AgentMark
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.SectionHeader
+import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.UpdateProgressBar
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.LocalScrollHaptics
 
 /** Appearance, behaviour, server and about — the whole app's knobs. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,7 +90,9 @@ fun SettingsScreen(
     val uriHandler = LocalUriHandler.current
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .scrollHaptics(LocalScrollHaptics.current),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -256,6 +261,17 @@ fun SettingsScreen(
                     onCheckedChange = { value ->
                         cue(HapticCue.SENT)
                         app.update { it.copy(streamingHaptics = value) }
+                    },
+                )
+                SettingsDivider()
+                SwitchRow(
+                    icon = Icons.Rounded.ArrowUpward,
+                    title = "Scroll haptics",
+                    subtitle = "A tick under your finger as lists move",
+                    checked = settings.scrollHaptics,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.SENT)
+                        app.update { it.copy(scrollHaptics = value) }
                     },
                 )
                 SettingsDivider()
