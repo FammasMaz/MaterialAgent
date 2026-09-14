@@ -1,5 +1,6 @@
 package com.materialagent.ui.theme
 
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.PlatformTextStyle
@@ -92,7 +93,7 @@ private fun body(
     platformStyle = NoFontPadding,
 )
 
-val MaterialAgentTypography = Typography(
+private val BaselineTypography = Typography(
     // Display — the biggest hero moments, e.g. the connect screen wordmark.
     displayLarge = display(56, 60, -0.6),
     displayMedium = display(44, 50, -0.4),
@@ -117,6 +118,39 @@ val MaterialAgentTypography = Typography(
     labelLarge = body(15, 20, 0.1, FontWeight.SemiBold),
     labelMedium = body(12, 16, 0.5, FontWeight.SemiBold),
     labelSmall = body(11, 15, 0.6, FontWeight.SemiBold),
+)
+
+/**
+ * The app's ladder, plus Material 3 Expressive's 15 emphasized styles derived from
+ * it rather than repeated, so the two can never drift.
+ *
+ * Expresssive adds the emphasized voice for *actions, selection states and counts* —
+ * the places where text is already saying something its neighbours are not. Stock M3
+ * swaps in a brand font for them; this app has a single variable font, so the honest
+ * equivalent is one step of weight in the same family, which [heavier] takes care of.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+val MaterialAgentTypography = BaselineTypography.copy(
+    displayLargeEmphasized = BaselineTypography.displayLarge.heavier(),
+    displayMediumEmphasized = BaselineTypography.displayMedium.heavier(),
+    displaySmallEmphasized = BaselineTypography.displaySmall.heavier(),
+    headlineLargeEmphasized = BaselineTypography.headlineLarge.heavier(),
+    headlineMediumEmphasized = BaselineTypography.headlineMedium.heavier(),
+    headlineSmallEmphasized = BaselineTypography.headlineSmall.heavier(),
+    titleLargeEmphasized = BaselineTypography.titleLarge.heavier(),
+    titleMediumEmphasized = BaselineTypography.titleMedium.heavier(),
+    titleSmallEmphasized = BaselineTypography.titleSmall.heavier(),
+    bodyLargeEmphasized = BaselineTypography.bodyLarge.heavier(),
+    bodyMediumEmphasized = BaselineTypography.bodyMedium.heavier(),
+    bodySmallEmphasized = BaselineTypography.bodySmall.heavier(),
+    labelLargeEmphasized = BaselineTypography.labelLarge.heavier(),
+    labelMediumEmphasized = BaselineTypography.labelMedium.heavier(),
+    labelSmallEmphasized = BaselineTypography.labelSmall.heavier(),
+)
+
+/** One step of weight, keeping the family and every other property untouched. */
+private fun TextStyle.heavier(): TextStyle = copy(
+    fontWeight = FontWeight(((fontWeight ?: FontWeight.SemiBold).weight + 100).coerceAtMost(900)),
 )
 
 /**

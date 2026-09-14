@@ -126,6 +126,7 @@ private fun rememberLabelWidth(label: String, showLabel: Boolean): Dp {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun NavigationPill(
     destination: AgentDestination,
@@ -216,7 +217,13 @@ private fun NavigationPill(
                     Spacer(Modifier.width(LABEL_GAP))
                     Text(
                         text = destination.label,
-                        style = MaterialTheme.typography.labelLarge,
+                        // The selected destination is a selection state, so it takes
+                        // the emphasized label; unselected ones keep the baseline weight.
+                        style = if (selected) {
+                            MaterialTheme.typography.labelLargeEmphasized
+                        } else {
+                            MaterialTheme.typography.labelLarge
+                        },
                         // Pinned to its measured width and denied wrapping, so a
                         // half-revealed label is a clipped label rather than a
                         // reflowed one.
