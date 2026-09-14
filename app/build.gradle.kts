@@ -15,7 +15,7 @@ android {
         applicationId = "com.materialagent"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
+        versionCode = 7
         versionName = "1.0.0-beta.5"
 
         // This app ships from GitHub Releases and nowhere else. The flag exists
