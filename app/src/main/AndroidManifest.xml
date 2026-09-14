@@ -6,6 +6,15 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!--
+      Required before the updater may hand a downloaded APK to the platform
+      installer. Without it `canRequestPackageInstalls()` does not return false —
+      it throws SecurityException, which took the whole app down the moment the
+      user tapped Install. Declaring it lets the app instead detect that the
+      "install unknown apps" grant is missing and send the user to that setting.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:name=".MaterialAgentApp"
         android:allowBackup="true"

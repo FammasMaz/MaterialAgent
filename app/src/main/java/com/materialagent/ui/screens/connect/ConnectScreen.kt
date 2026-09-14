@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -244,6 +245,12 @@ fun ConnectScreen(
                     leadingIcon = { Icon(Icons.Rounded.Dns, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Uri,
+                        // A URL and a password are not prose. Leaving the default
+                        // sentence capitalisation on quietly rewrites what the user
+                        // typed — "user" arrives as "User" — and the
+                        // gateway answers "wrong username or password".
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
                         imeAction = ImeAction.Next,
                     ),
                     shape = RoundedCornerShape(16.dp),
@@ -283,6 +290,8 @@ fun ConnectScreen(
                         supportingText = { Text("The token your server printed when it started.") },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
                             imeAction = ImeAction.Done,
                         ),
                         keyboardActions = KeyboardActions(onDone = { if (canSubmit) submit() }),
@@ -296,7 +305,12 @@ fun ConnectScreen(
                         label = { Text("Username") },
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = null) },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
+                            imeAction = ImeAction.Next,
+                        ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -309,6 +323,8 @@ fun ConnectScreen(
                         leadingIcon = { Icon(Icons.Rounded.Lock, contentDescription = null) },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Password,
+                            capitalization = KeyboardCapitalization.None,
+                            autoCorrectEnabled = false,
                             imeAction = ImeAction.Done,
                         ),
                         keyboardActions = KeyboardActions(onDone = { if (canSubmit) submit() }),

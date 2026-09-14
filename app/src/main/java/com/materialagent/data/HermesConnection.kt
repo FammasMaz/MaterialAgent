@@ -15,6 +15,7 @@ import java.net.SocketTimeoutException
 import java.net.UnknownServiceException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -126,7 +128,13 @@ class HermesConnection(
      * watcher must not cancel the watcher that is running it.
      */
     private suspend fun dial(profile: ServerProfile) {
-        val authParam = resolveAuth(profile)
+        // Password sign-in reaches the gateway through blocking OkHttp calls
+        // (provider discovery, /auth/password-login, /api/auth/ws-ticket). Those
+        // are called from a ViewModel scope, which is the main dispatcher, so
+        // doing them inline throws NetworkOnMainThreadException on Android the
+        // moment the user picks Password — the token path only escapes because it
+        // needs no HTTP at all.
+        val authParam = withContext(Dispatchers.IO) { resolveAuth(profile) }
         val wsUrl = HermesUrl.wsUrl(profile.baseUrl, authParam, profile.profileName)
             ?: throw HermesTransportException("Not a valid server address: ${profile.baseUrl}")
 
