@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -21,6 +23,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -32,6 +36,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
@@ -89,13 +94,14 @@ fun AgentNavBar(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.selectableGroup(),
             ) {
                 destinations.forEach { destination ->
                     NavigationPill(
                         destination = destination,
                         selected = currentRoute == destination.route,
                         onClick = {
-                            onCue(HapticCue.SENT)
+                            onCue(HapticCue.UI_ACTION)
                             onNavigate(destination)
                         },
                     )
@@ -163,12 +169,26 @@ private fun NavigationPill(
     )
 
     Surface(
-        onClick = onClick,
-        modifier = Modifier.pressScale(interaction),
+        // A destination is a tab, and a tab's state is not decoration: the bar's
+        // whole idea is that its shape says where you are, which a screen reader
+        // cannot see. `Surface(onClick)` publishes a button and no selection, so
+        // `selectable` states it outright — selection, tab role and click in one
+        // node. It also reserves M3's 48dp touch target the way the clickable
+        // overload was already doing implicitly (the pill's own 42dp stays the
+        // visual, centred inside it).
+        modifier = Modifier
+            .pressScale(interaction)
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
+                interactionSource = interaction,
+                indication = ripple(),
+                onClick = onClick,
+            )
+            .minimumInteractiveComponentSize(),
         shape = AgentShapes.pill,
         color = container,
         contentColor = content,
-        interactionSource = interaction,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
@@ -189,48 +209,47 @@ private fun NavigationPill(
                 contentDescription = if (selected && showLabel) null else destination.label,
                 modifier = Modifier.size(iconSize),
             )
-            // The label is revealed by animating exactly one scalar — its width
-            // — instead of letting `animateContentSize` chase the pill's measured
-            // size. The old version had two size animations fighting over the same
-            // subtree (the pill's own, and an AnimatedVisibility nested inside it),
-            // with that subtree re-measured every frame and the whole Row re-laid
-            // out on top of it. Neighbouring pills visibly snapped sideways.
-            // One width, measured once from the text, keeps each frame to a single
-            // layout pass.
-            val labelWidth = rememberLabelWidth(destination.label, showLabel)
-            val reveal by animateDpAsState(
-                targetValue = if (selected && showLabel) labelWidth + LABEL_GAP else 0.dp,
-                animationSpec = placementSpec(),
-                label = "navLabelReveal",
-            )
-            val labelAlpha by animateFloatAsState(
-                targetValue = if (selected && showLabel) 1f else 0f,
-                animationSpec = alphaSpec(),
-                label = "navLabelAlpha",
-            )
+            // The label is composed only when the bar is going to show it. Its Box
+            // stays 0dp wide while collapsed, but the measured text still sets the
+            // row's height — so at a large font scale an invisible label was what
+            // made the pill (and the whole toolbar) grow: measured 51.4dp at font
+            // scale 2.0 and 72.8dp at 3.0 against 42dp here.
+            if (showLabel) {
+                val labelWidth = rememberLabelWidth(destination.label, showLabel)
+                val reveal by animateDpAsState(
+                    targetValue = if (selected) labelWidth + LABEL_GAP else 0.dp,
+                    animationSpec = placementSpec(),
+                    label = "navLabelReveal",
+                )
+                val labelAlpha by animateFloatAsState(
+                    targetValue = if (selected) 1f else 0f,
+                    animationSpec = alphaSpec(),
+                    label = "navLabelAlpha",
+                )
 
-            Box(modifier = Modifier.width(reveal).clipToBounds()) {
-                Row(
-                    modifier = Modifier.alpha(labelAlpha),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Spacer(Modifier.width(LABEL_GAP))
-                    Text(
-                        text = destination.label,
-                        // The selected destination is a selection state, so it takes
-                        // the emphasized label; unselected ones keep the baseline weight.
-                        style = if (selected) {
-                            MaterialTheme.typography.labelLargeEmphasized
-                        } else {
-                            MaterialTheme.typography.labelLarge
-                        },
-                        // Pinned to its measured width and denied wrapping, so a
-                        // half-revealed label is a clipped label rather than a
-                        // reflowed one.
-                        maxLines = 1,
-                        softWrap = false,
-                        modifier = Modifier.width(labelWidth),
-                    )
+                Box(modifier = Modifier.width(reveal).clipToBounds()) {
+                    Row(
+                        modifier = Modifier.alpha(labelAlpha),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Spacer(Modifier.width(LABEL_GAP))
+                        Text(
+                            text = destination.label,
+                            // The selected destination is a selection state, so it takes
+                            // the emphasized label; unselected ones keep the baseline weight.
+                            style = if (selected) {
+                                MaterialTheme.typography.labelLargeEmphasized
+                            } else {
+                                MaterialTheme.typography.labelLarge
+                            },
+                            // Pinned to its measured width and denied wrapping, so a
+                            // half-revealed label is a clipped label rather than a
+                            // reflowed one.
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.width(labelWidth),
+                        )
+                    }
                 }
             }
         }

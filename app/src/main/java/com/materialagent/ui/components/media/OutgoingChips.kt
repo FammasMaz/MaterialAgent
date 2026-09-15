@@ -32,6 +32,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -177,9 +178,15 @@ private fun OutgoingImageThumb(
             FilledTonalIconButton(
                 onClick = { onRemove(attachment) },
                 shapes = IconButtonDefaults.shapes(),
+                // 28dp is the visual; the 48dp M3 asks for is reserved around it.
+                // `minimumInteractiveComponentSize()` centres the smaller button
+                // inside itself, so the disc sits 14dp in from the chip's corner
+                // rather than 4dp — and its target spans 4dp to 52dp, which is the
+                // part that matters for the control that deletes an attachment.
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(4.dp)
+                    .minimumInteractiveComponentSize()
                     .size(28.dp),
             ) {
                 Icon(
@@ -246,6 +253,7 @@ private fun OutgoingFileChip(
                     shapes = IconButtonDefaults.shapes(),
                     modifier = Modifier
                         .padding(start = 4.dp)
+                        .minimumInteractiveComponentSize()
                         .size(32.dp),
                 ) {
                     Icon(

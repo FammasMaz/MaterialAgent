@@ -24,6 +24,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -359,7 +360,9 @@ private fun AudioHeaderRow(
             // The morphing overload, so the disc's shape is *state*: pill at rest,
             // square under the finger.
             shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.size(44.dp),
+            // The row's primary action: a 44dp disc, with M3's 48dp target
+            // reserved around it rather than clipped to the visual.
+            modifier = Modifier.minimumInteractiveComponentSize().size(44.dp),
         ) {
             if (preparing) {
                 CircularProgressIndicator(

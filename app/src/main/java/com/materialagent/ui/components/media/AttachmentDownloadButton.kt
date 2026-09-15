@@ -9,6 +9,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -36,7 +37,9 @@ internal fun AttachmentDownloadButton(
         onClick = { download.start() },
         shapes = IconButtonDefaults.shapes(),
         enabled = !download.busy,
-        modifier = modifier.size(44.dp),
+        // 44dp is the visual; the 48dp minimum is reserved inside the modifier so
+        // the button keeps its size while the target stops being under-sized.
+        modifier = modifier.minimumInteractiveComponentSize().size(44.dp),
     ) {
         if (download.busy) {
             CircularProgressIndicator(
