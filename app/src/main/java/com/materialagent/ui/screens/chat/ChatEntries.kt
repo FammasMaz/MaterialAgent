@@ -60,6 +60,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -583,11 +584,13 @@ fun TodosCard(
     modifier: Modifier = Modifier,
 ) {
     val done = todos.count { it.status.equals("completed", ignoreCase = true) }
-    // Progress only ever moves forward, so it must not overshoot: the button-press
-    // spring would spring past the target and walk the bar backwards.
+    // The bar's length is a *size*, so it wants a spatial spec — but never the
+    // bouncy one, which would spring past the target and walk the bar backwards.
+    // `ProgressAnimationSpec` is Material's own determinate ramp: a spatial spring
+    // damped critically enough that it can only ever approach the value.
     val progress by animateFloatAsState(
         targetValue = if (todos.isEmpty()) 0f else done.toFloat() / todos.size,
-        animationSpec = alphaSpec(),
+        animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
         label = "todoProgress",
     )
 
