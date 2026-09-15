@@ -14,12 +14,20 @@ import androidx.compose.ui.unit.dp
 /**
  * Material 3 Expressive shape scale.
  *
- * Two deliberate departures from baseline M3: every radius is bumped one step
- * (16 → 22, 28 → 32) because expressive surfaces read as *soft* objects, and
- * the small end stays tight enough that chips and tool badges still look like
- * instruments rather than pills.
+ * Two deliberate departures from baseline M3: the scale is softened, because
+ * expressive surfaces read as *soft* objects, and the small end stays tight
+ * enough that chips and tool badges still look like instruments rather than
+ * pills.
  *
- * So this scale *is* the app's shape vocabulary, one step up from M3E's. Cards,
+ * The numbers are a customization, not a misreading. M3 documents the corner
+ * radius scale as 0 / 4 / 8 / 12 / 16 / 20 / 28 / 32 / 48 plus `full`
+ * (https://m3.material.io/styles/shape/corner-radius-scale), and allows a corner
+ * radius style to be customized to a different size. `medium` keeps M3's 16 and
+ * `extraLarge` takes 32 — M3E's `extraLargeIncreased` — while `extraSmall` (6),
+ * `small` (10) and `large` (22) sit between M3's steps, which is where a softer
+ * scale lands.
+ *
+ * So this scale *is* the app's shape vocabulary. Cards,
  * section containers and inner surfaces all read a step of it; the two places
  * that need M3E's own extended tokens read them from [androidx.compose.material3.MaterialTheme]
  * directly (`shapes.largeIncreased` for banners, `shapes.extraLargeIncreased` for
