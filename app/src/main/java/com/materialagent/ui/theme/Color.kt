@@ -3,6 +3,7 @@ package com.materialagent.ui.theme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
+import kotlin.math.pow
 
 /*
  * The MaterialAgent identity: "Hermes" — winged messenger, night sky, gilded
@@ -158,20 +159,26 @@ fun skinScheme(colors: Map<String, String>, dark: Boolean) = runCatching {
     val parsedOk = ok?.let(::parseHex)
 
     if (dark) {
+        val container = parsedAccent.copy(alpha = 0.28f).compositeOver(Dark.surface)
         Dark.copy(
             primary = parsedAccent,
             onPrimary = readableOn(parsedAccent),
-            primaryContainer = parsedAccent.copy(alpha = 0.28f).compositeOver(Dark.surface),
-            onPrimaryContainer = parsedAccent,
+            primaryContainer = container,
+            // The container is the accent *composited* over the surface, so a pale
+            // accent lands near-white there. Reading the ink off the raw accent
+            // painted pale on pale — about 1.2:1, text that is not there. It has to
+            // be read off what is actually behind the text.
+            onPrimaryContainer = readableOn(container),
             tertiary = parsedWarn ?: Dark.tertiary,
             secondary = parsedOk ?: Dark.secondary,
         )
     } else {
+        val container = parsedAccent.copy(alpha = 0.24f).compositeOver(Light.surface)
         Light.copy(
             primary = parsedAccent,
             onPrimary = readableOn(parsedAccent),
-            primaryContainer = parsedAccent.copy(alpha = 0.24f).compositeOver(Light.surface),
-            onPrimaryContainer = parsedAccent,
+            primaryContainer = container,
+            onPrimaryContainer = readableOn(container),
             tertiary = parsedWarn ?: Light.tertiary,
             secondary = parsedOk ?: Light.secondary,
         )
@@ -187,11 +194,36 @@ private fun parseHex(value: String): Color? = runCatching {
     }
 }.getOrNull()
 
-/** Picks black or white depending on which reads better on [background]. */
+/**
+ * Picks the ink that reads better on [background], scored by the contrast ratio
+ * WCAG actually uses.
+ *
+ * The previous test was the luma approximation `0.299r + 0.587g + 0.114b`
+ * against a 0.6 threshold, which is neither gamma-aware nor a contrast ratio, so
+ * mid-tones took the wrong ink: `#7A7A7A` scored 0.48 and got white at roughly
+ * 4.0:1 — under the 4.5:1 bar for body text. Both candidates are now measured
+ * and the higher ratio wins.
+ */
 private fun readableOn(background: Color): Color {
-    val luminance = 0.299f * background.red + 0.587f * background.green + 0.114f * background.blue
-    return if (luminance > 0.6f) Color(0xFF1B1B21) else Color.White
+    val backgroundLuminance = relativeLuminance(background)
+    val darkInk = Color(0xFF1B1B21)
+    val darkInkRatio = contrastRatio(backgroundLuminance, relativeLuminance(darkInk))
+    val whiteRatio = contrastRatio(backgroundLuminance, relativeLuminance(Color.White))
+    return if (darkInkRatio >= whiteRatio) darkInk else Color.White
 }
+
+/** WCAG 2.x relative luminance: sRGB channels linearised before weighting. */
+private fun relativeLuminance(color: Color): Float {
+    fun linear(channel: Float): Float =
+        if (channel <= 0.03928f) channel / 12.92f else ((channel + 0.055f) / 1.055f).pow(2.4f)
+    return 0.2126f * linear(color.red) +
+        0.7152f * linear(color.green) +
+        0.0722f * linear(color.blue)
+}
+
+/** WCAG contrast ratio between two relative luminances, from 1:1 to 21:1. */
+private fun contrastRatio(a: Float, b: Float): Float =
+    (maxOf(a, b) + 0.05f) / (minOf(a, b) + 0.05f)
 
 private fun Color.compositeOver(background: Color): Color {
     val alpha = this.alpha
