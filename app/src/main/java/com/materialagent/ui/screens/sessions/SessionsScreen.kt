@@ -40,6 +40,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -405,7 +408,12 @@ private fun SearchField(
     onQueryChange: (String) -> Unit,
     onClear: () -> Unit,
 ) {
-    OutlinedTextField(
+    // M3's search bar is a contained, filled field in the `surfaceContainerHigh`
+    // role. An outlined field belongs to the baseline "divided" search style,
+    // which the search specs carry as "not recommended" in favour of the
+    // contained one — and it left this field with no container colour at all,
+    // reading as a form to fill in rather than as the way to search the list.
+    TextField(
         value = query,
         onValueChange = onQueryChange,
         placeholder = { Text("Search conversations") },
@@ -419,6 +427,15 @@ private fun SearchField(
             }
         },
         shape = AgentShapes.pill,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            // The container *is* the affordance in the contained style: no
+            // underline, and the container's shape does not change when focused.
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+        ),
         modifier = Modifier.fillMaxWidth(),
     )
 }
