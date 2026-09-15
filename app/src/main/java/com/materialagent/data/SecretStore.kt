@@ -11,6 +11,17 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
+ * The credential lookup the connection layer depends on.
+ *
+ * A one-method seam rather than the concrete [SecretStore], so the reconnect
+ * policy — which is pure decision making and has nothing to do with the Android
+ * Keystore — can be exercised from JVM tests.
+ */
+interface SecretSource {
+    fun get(id: String): String?
+}
+
+/**
  * Small Keystore-backed secret vault.
  *
  * Credentials never touch plain storage: an AES-256-GCM key is generated
@@ -22,7 +33,7 @@ import javax.crypto.spec.GCMParameterSpec
  * Deliberately tiny: no third-party crypto dependency, no `EncryptedSharedPreferences`
  * (deprecated upstream), and no plaintext fallback.
  */
-class SecretStore(context: Context) {
+class SecretStore(context: Context) : SecretSource {
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val key: SecretKey? by lazy { loadOrCreateKey() }
@@ -38,7 +49,7 @@ class SecretStore(context: Context) {
         }
     }
 
-    fun get(id: String): String? {
+    override fun get(id: String): String? {
         val k = key ?: return null
         val encoded = prefs.getString(keyFor(id), null) ?: return null
         return runCatching {

@@ -48,6 +48,11 @@ data class AppSettings(
     // the inbox readable without hiding anything, since the group expands.
     val groupSessions: Boolean = true,
     val sendOnEnter: Boolean = false,
+    // Off means the window is FLAG_SECURE, so the system will not screenshot it
+    // and the transcript stays out of the Recents thumbnail. The default is the
+    // private one: a transcript is somebody's own conversation, and a user who
+    // wants to share a screenshot can say so.
+    val allowScreenshots: Boolean = false,
     val autoCheckUpdates: Boolean = true,
     // The version the user asked not to be told about again. Null, not "": the
     // blank sentinel exists only on disk, where DataStore has no null.

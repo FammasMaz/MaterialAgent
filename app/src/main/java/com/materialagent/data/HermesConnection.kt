@@ -54,11 +54,19 @@ sealed interface ConnectionStatus {
  */
 class HermesConnection(
     private val http: okhttp3.OkHttpClient,
-    private val secrets: SecretStore,
+    private val secrets: SecretSource,
     private val scope: CoroutineScope,
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
 
-    val client = HermesClient(http, scope)
+    val client = HermesClient(http, scope, now)
+
+    init {
+        // TEMPORARY diagnosis: mirror the transport's own decisions into logcat.
+        client.trace = { line -> android.util.Log.i("MAConn", line) }
+    }
+
+    private fun note(line: String) = android.util.Log.i("MAConn", line)
 
     private val _status = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Idle)
     val status: StateFlow<ConnectionStatus> = _status.asStateFlow()
@@ -80,7 +88,12 @@ class HermesConnection(
 
     /** Publishes [status] only while [attemptId] is still the newest attempt. */
     private fun publish(attemptId: Int, status: ConnectionStatus) {
-        if (attempts.allows(attemptId)) _status.value = status
+        if (attempts.allows(attemptId)) {
+            note("publish #$attemptId ${status::class.java.simpleName}")
+            _status.value = status
+        } else {
+            note("publish #$attemptId DROPPED ${status::class.java.simpleName}")
+        }
     }
 
     suspend fun activate(profile: ServerProfile): ConnectionStatus {
@@ -148,19 +161,28 @@ class HermesConnection(
      * answer that arrived in the background is on screen when they get back.
      */
     fun onForeground() {
-        if (activeProfile == null) return
+        val profile = activeProfile ?: return
         if (intentionalStop) return
-        client.checkLivenessOnForeground()
-        // Still genuinely open: leave it alone rather than flashing a reconnect
-        // banner at someone who simply switched apps and came back.
-        if (client.state.value == com.materialagent.core.ConnectionState.OPEN) return
-        // An attempt is already under way — the launch connect or the watcher's
-        // own redial. Starting a second one on top of it is how the app ended up
-        // connected but labelled disconnected: both dialled, the first to finish
-        // cancelled the other, and the cancelled dial's verdict was published
-        // last. Whoever is already dialling will report its own outcome.
-        if (_status.value.isBusy) return
-        retry()
+        // A dial is genuinely in flight (the launch connect, or a redial that is
+        // mid-handshake). Starting a second one on top of it is how the app ended
+        // up connected but labelled disconnected: both dialled, the first to
+        // finish cancelled the other, and the cancelled dial's verdict was
+        // published last. Whoever is already dialling will report its own outcome.
+        //
+        // Reconnecting does *not* count: that status is also what the watcher
+        // publishes while it sits in its backoff, and making the user wait out a
+        // 30 s timer behind a banner is the same bug from the outside.
+        note("onForeground activeProfile=true status=${_status.value::class.java.simpleName}")
+        if (_status.value is ConnectionStatus.Connecting) return
+        scope.launch {
+            // Not "does the state read OPEN": ask the gateway. A socket that died
+            // while we were away still reads OPEN, because the failure callback
+            // and ON_START arrive together and ON_START wins whenever the main
+            // thread is scheduled first.
+            if (client.checkLivenessOnForeground()) return@launch
+            if (intentionalStop || activeProfile?.id != profile.id) return@launch
+            retry()
+        }
     }
 
     /**
@@ -198,39 +220,60 @@ class HermesConnection(
             var attempt = 0
             while (!intentionalStop && activeProfile?.id == profile.id) {
                 delay(WATCH_TICK_MS)
-                val state = client.state.value
-                if (state == com.materialagent.core.ConnectionState.ERROR) {
-                    // Credential rejection or a hard socket error: surface it.
-                    val message = if (_handshakeComplete.value) {
-                        "Connection lost"
-                    } else {
-                        "Could not reach ${profile.baseUrl}"
-                    }
-                    publish(
-                        attemptId,
-                        ConnectionStatus.Failed(profile, message, needsCredentials = false),
-                    )
-                    return@launch
-                }
-                if (state != com.materialagent.core.ConnectionState.OPEN) {
-                    attempt += 1
-                    publish(attemptId, ConnectionStatus.Reconnecting(profile, attempt))
-                    val backoff = (BASE_BACKOFF_MS * (1L shl (attempt - 1).coerceAtMost(4)))
-                        .coerceAtMost(MAX_BACKOFF_MS)
-                    delay(backoff)
-                    if (intentionalStop || activeProfile?.id != profile.id) return@launch
-                    val ok = runCatching { dial(profile) }.isSuccess
-                    if (ok) {
+                if (client.state.value == com.materialagent.core.ConnectionState.OPEN) {
+                    if (attempt != 0) {
                         attempt = 0
                         publish(attemptId, ConnectionStatus.Connected(profile))
                     }
-                } else if (attempt != 0) {
+                    continue
+                }
+                // Ending the watcher is reserved for a rejected credential, which
+                // no amount of retrying can fix. Every other way of reaching ERROR
+                // — the gateway dropping us while the app was frozen, a wifi/cell
+                // handover, a gateway restart, a redial that timed out — is
+                // transient, and giving up on it left a reachable gateway showing
+                // "Connection lost" until the user tapped Retry by hand. The
+                // backoff ladder below only ever ran once because of it.
+                if (client.isAuthRejected) {
+                    note("watcher: credentials rejected -> Failed, stopping")
+                    publish(
+                        attemptId,
+                        ConnectionStatus.Failed(
+                            profile,
+                            "${profile.name} rejected the stored sign-in. Sign in again.",
+                            needsCredentials = true,
+                        ),
+                    )
+                    return@launch
+                }
+                attempt += 1
+                note("watcher: reconnecting, attempt $attempt")
+                publish(attemptId, ConnectionStatus.Reconnecting(profile, attempt))
+                delay(backoffFor(attempt))
+                if (intentionalStop || activeProfile?.id != profile.id) return@launch
+                val error = runCatching { dial(profile) }.exceptionOrNull()
+                if (error == null) {
+                    note("watcher: redial ok")
                     attempt = 0
                     publish(attemptId, ConnectionStatus.Connected(profile))
+                    continue
+                }
+                // A redial can fail for a reason retrying cannot fix either: the
+                // password was changed on the server, or sign-in is being
+                // rate-limited. classify() already knows which failures those are.
+                note("watcher: redial failed: ${error::class.java.simpleName}")
+                val failure = classify(profile, error)
+                if (failure is ConnectionStatus.Failed && failure.needsCredentials) {
+                    publish(attemptId, failure)
+                    return@launch
                 }
             }
         }
     }
+
+    /** Exponential with a ceiling: 1.5 s, 3 s, 6 s, 12 s, 24 s, then 30 s. */
+    private fun backoffFor(attempt: Int): Long =
+        (BASE_BACKOFF_MS * (1L shl (attempt - 1).coerceAtMost(4))).coerceAtMost(MAX_BACKOFF_MS)
 
     /**
      * Resolves the credential the socket upgrade needs.

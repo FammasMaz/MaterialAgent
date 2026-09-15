@@ -75,11 +75,29 @@ class HermesClient(
     private val requestIds = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
 
+    /** TEMPORARY diagnosis hook: set by HermesConnection to mirror decisions into logcat. */
+    @Volatile var trace: ((String) -> Unit)? = null
+    private fun note(line: String) { trace?.invoke(line) }
+
     @Volatile private var socket: WebSocket? = null
     @Volatile private var lastInboundAt: Long = 0
+    @Volatile private var inboundFrames: Long = 0
+    @Volatile private var lastInboundAtBoot: Long = 0
     @Volatile private var connectedUrl: String? = null
     private var heartbeatJob: Job? = null
     private val closing = AtomicBoolean(false)
+
+    /**
+     * Whether the last close was a credential rejection (4401/4403).
+     *
+     * [ConnectionState.ERROR] is reached two very different ways — the server
+     * refusing our password, and the transport simply breaking — and they want
+     * opposite responses: one has to be shown to the user, the other has to be
+     * retried. Keeping the reason here is what lets the connection owner tell
+     * them apart. Reset on every dial, so it always describes the current socket.
+     */
+    @Volatile private var authRejected = false
+    val isAuthRejected: Boolean get() = authRejected
 
     /** Highest `seq` observed per session — the resume watermark. */
     private val watermarks = ConcurrentHashMap<String, Int>()
@@ -100,6 +118,7 @@ class HermesClient(
     suspend fun connect(wsUrl: String, openingTimeoutMs: Long = 20_000): Unit {
         disconnect(reason = "reconnect")
         closing.set(false)
+        authRejected = false
         connectedUrl = wsUrl
         _state.value = ConnectionState.CONNECTING
 
@@ -109,14 +128,18 @@ class HermesClient(
         val ws = httpClient.newWebSocket(request, listener)
         socket = ws
 
+        lastInboundAtBoot = now()
+        inboundFrames = 0
         val ready = withTimeoutOrNull(openingTimeoutMs) { opened.await() }
         if (ready == null) {
             // Either the socket never opened or the server never said hello.
+            note("connect TIMEOUT urlsuffix=${wsUrl.takeLast(12)}")
             ws.cancel()
             socket = null
             _state.value = ConnectionState.ERROR
             throw HermesTransportException("Timed out waiting for the gateway handshake")
         }
+        note("connect OPEN urlsuffix=${wsUrl.takeLast(12)}")
         _state.value = ConnectionState.OPEN
         startHeartbeat()
         maybeReplay()
@@ -134,6 +157,7 @@ class HermesClient(
 
     /** Marks the current socket stale without tearing down the URL, so a caller can redial. */
     private fun invalidate(reason: String) {
+        note("invalidate: $reason (inboundFrames=$inboundFrames)")
         socket?.cancel()
         socket = null
         heartbeatJob?.cancel()
@@ -324,13 +348,21 @@ class HermesClient(
                     put("method", JsonPrimitive("gateway.ping"))
                     put("params", JsonObject(emptyMap()))
                 }
-                ws.send(ping.toString())
+                if (!ws.send(ping.toString())) {
+                    // OkHttp answers false once the socket is already failed. The
+                    // silence clock below cannot see a dead socket until its own
+                    // deadline; this says so now, in the one place that talks to
+                    // the socket every 15 seconds.
+                    invalidate("Gateway socket refused the heartbeat")
+                    return@launch
+                }
             }
         }
     }
 
     /**
-     * Re-checks liveness after the app comes back to the foreground.
+     * Re-checks liveness after the app comes back to the foreground, and reports
+     * whether the socket can still be trusted.
      *
      * [startHeartbeat] is a coroutine parked on `delay`, and a backgrounded
      * Android app is frozen: the process is not scheduled, so no ping goes out
@@ -339,16 +371,35 @@ class HermesClient(
      * has to be read directly rather than trusting a heartbeat that was asleep —
      * otherwise the socket reports OPEN while the far end has already let go, and
      * the user only finds out when a message hangs.
+     *
+     * Silence is still not proof of life, which is why this asks the gateway
+     * rather than only reading the clock. Two gaps make the clock alone unsafe:
+     * a socket can die during a *short* absence, before the deadline is anywhere
+     * near; and the failure notification and `ON_START` are delivered at the same
+     * moment, so whenever the main thread is scheduled first the client is still
+     * reporting OPEN when this runs. A `gateway.ping` costs one round trip and
+     * settles it, so a message sent straight after returning to the app goes to a
+     * socket that has actually been checked.
      */
-    fun checkLivenessOnForeground() {
-        if (socket == null) return
+    suspend fun checkLivenessOnForeground(): Boolean {
+        note("checkLiveness socket=${if (socket == null) "null" else "live"} silence=${(now() - lastInboundAt) / 1000}s state=${_state.value}")
+        if (socket == null) return false
         val silentFor = now() - lastInboundAt
         if (silentFor >= HEARTBEAT_DEADLINE_MS) {
             invalidate(
                 "Gateway went quiet while the app was in the background " +
                     "(${silentFor / 1000}s of silence)",
             )
+            return false
         }
+        val answered = runCatching {
+            request("gateway.ping", timeoutMs = FOREGROUND_PROBE_TIMEOUT_MS)
+        }.isSuccess
+        if (!answered) {
+            invalidate("Gateway did not answer the foreground probe")
+            return false
+        }
+        return true
     }
 
     private fun failAllPending(error: Throwable) {
@@ -375,6 +426,7 @@ class HermesClient(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (socket !== webSocket) return
+            note("onFailure ${t::class.java.simpleName}: ${t.message} (inbound=$inboundFrames)")
             if (!opened.isCompleted) opened.completeExceptionally(t)
             socket = null
             heartbeatJob?.cancel()
@@ -388,6 +440,7 @@ class HermesClient(
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             if (socket !== webSocket) return
+            note("onClosed code=$code reason=$reason (inbound=$inboundFrames)")
             socket = null
             heartbeatJob?.cancel()
             if (!opened.isCompleted) {
@@ -396,11 +449,10 @@ class HermesClient(
             failAllPending(HermesTransportException("Socket closed ($code) $reason"))
             // 4401/4403 are credential failures — surface them as ERROR so the
             // connection owner can prompt for re-authentication instead of
-            // silently retrying forever.
-            _state.value = when (code) {
-                4401, 4403 -> ConnectionState.ERROR
-                else -> ConnectionState.CLOSED
-            }
+            // silently retrying forever. Recording *why* is what lets it keep
+            // retrying everything else.
+            authRejected = code == 4401 || code == 4403
+            _state.value = if (authRejected) ConnectionState.ERROR else ConnectionState.CLOSED
         }
     }
 
@@ -409,5 +461,15 @@ class HermesClient(
         private const val REPLAY_TIMEOUT_MS = 10_000L
         const val HEARTBEAT_INTERVAL_MS = 15_000L
         const val HEARTBEAT_DEADLINE_MS = 45_000L
+
+        /**
+         * How long the foreground probe waits for `gateway.ping`.
+         *
+         * Short by design: the gateway answers pings off its own event loop, so
+         * anything that has not replied within seconds is a socket the user does
+         * not want their next message written into. Orders of magnitude above the
+         * round trip this normally takes.
+         */
+        const val FOREGROUND_PROBE_TIMEOUT_MS = 8_000L
     }
 }

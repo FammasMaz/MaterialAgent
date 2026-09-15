@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MotionPhotosOn
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
@@ -281,6 +282,23 @@ fun SettingsScreen(
                     onCheckedChange = { value ->
                         cue(HapticCue.TOGGLE)
                         app.update { it.copy(sendOnEnter = value) }
+                    },
+                )
+            }
+        }
+
+        // ── Privacy ────────────────────────────────────────────────────────
+        item { SectionHeader("Privacy") }
+        item {
+            SettingsGroup {
+                SwitchRow(
+                    icon = Icons.Rounded.Lock,
+                    title = "Allow screenshots",
+                    subtitle = "Off keeps the transcript out of screenshots and the Recents view",
+                    checked = settings.allowScreenshots,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.TOGGLE)
+                        app.update { it.copy(allowScreenshots = value) }
                     },
                 )
             }
