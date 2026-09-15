@@ -91,6 +91,11 @@ Notes worth knowing:
 | ![Approval](docs/screenshots/chat-approval-light.png) | ![Clarify](docs/screenshots/chat-clarify-light.png) | ![Clarify answered](docs/screenshots/chat-clarify-answered-light.png) |
 | ![Model picker](docs/screenshots/model-picker-light.png) | ![Model search](docs/screenshots/model-picker-search-light.png) | ![Toolsets](docs/screenshots/agent-tools-light.png) |
 | ![MCP servers](docs/screenshots/agent-mcp-light.png) | ![Appearance](docs/screenshots/settings-appearance-light.png) | ![Notifications](docs/screenshots/settings-notifications-light.png) |
+| ![Connect](docs/screenshots/connect-empty-light.png) | ![Connect, filled in](docs/screenshots/connect-filled-light.png) | ![Connect, dark](docs/screenshots/connect-dark.png) |
+| ![Reconnecting](docs/screenshots/link-lost-light.png) | ![Audio playback](docs/screenshots/audio-player-light.png) | ![Dark theme](docs/screenshots/chat-dark.png) |
+
+Every screen here was captured against `scripts/demo-gateway.py`, the fake gateway in this
+repository — there is no real server, account or conversation in any of these images.
 
 ## Not there yet
 
