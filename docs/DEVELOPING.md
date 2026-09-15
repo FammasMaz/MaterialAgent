@@ -182,7 +182,7 @@ All verified against a live server; `docs/PROTOCOL.md` has the full list.
 | `session.close` invalidates the runtime handle | reusing it afterwards can answer `4007 session not found` |
 | Sequence numbers are per-session and valid only inside the active `replay_epoch` | stale watermarks must be discarded when the epoch changes |
 | A resumed session replays `pending_approval` | an approval raised while the socket was down still arrives |
-| `gateway.ready` carries no version field | the client's `serverVersion` stays null for it |
+| `gateway.ready` carries no version field | the gateway's version comes from `GET /api/health` instead, which answers without a session |
 | `session.list` can lag a branch-snapshot flush | a just-created branch may not be visible yet |
 
 ## Verified, and what is not
