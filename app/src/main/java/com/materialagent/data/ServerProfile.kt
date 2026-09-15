@@ -58,4 +58,19 @@ data class AppSettings(
     // blank sentinel exists only on disk, where DataStore has no null.
     val skippedVersion: String? = null,
     val activeProfileId: String? = null,
+
+    /**
+     * Keep the Hermes socket alive in the background via a foreground service,
+     * so turns and blocking questions still arrive as local notifications. The
+     * Hermes gateway has no push infrastructure, so this — not FCM — is the
+     * mechanism: without it a backgrounded process is frozen and nothing can
+     * reach the user until they reopen the app.
+     */
+    val keepAliveInBackground: Boolean = true,
+    /** The agent finished a turn while the user was away. */
+    val notifyTurns: Boolean = true,
+    /** An approval / clarify / sudo request is waiting (~60 s expiry). */
+    val notifyAttention: Boolean = true,
+    /** The connection dropped or recovered. Noisy; off by default. */
+    val notifyConnection: Boolean = false,
 )

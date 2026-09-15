@@ -71,6 +71,10 @@ class SettingsStore(context: Context) {
             sendOnEnter = prefs[SEND_ON_ENTER] ?: d.sendOnEnter,
             allowScreenshots = prefs[ALLOW_SCREENSHOTS] ?: d.allowScreenshots,
             autoCheckUpdates = prefs[AUTO_CHECK_UPDATES] ?: d.autoCheckUpdates,
+            keepAliveInBackground = prefs[KEEP_ALIVE_BACKGROUND] ?: d.keepAliveInBackground,
+            notifyTurns = prefs[NOTIFY_TURNS] ?: d.notifyTurns,
+            notifyAttention = prefs[NOTIFY_ATTENTION] ?: d.notifyAttention,
+            notifyConnection = prefs[NOTIFY_CONNECTION] ?: d.notifyConnection,
             skippedVersion = prefs[SKIPPED_VERSION]?.takeIf { it.isNotBlank() } ?: d.skippedVersion,
             activeProfileId = prefs[ACTIVE_PROFILE] ?: d.activeProfileId,
         )
@@ -139,6 +143,10 @@ class SettingsStore(context: Context) {
             prefs[SEND_ON_ENTER] = next.sendOnEnter
             prefs[ALLOW_SCREENSHOTS] = next.allowScreenshots
             prefs[AUTO_CHECK_UPDATES] = next.autoCheckUpdates
+            prefs[KEEP_ALIVE_BACKGROUND] = next.keepAliveInBackground
+            prefs[NOTIFY_TURNS] = next.notifyTurns
+            prefs[NOTIFY_ATTENTION] = next.notifyAttention
+            prefs[NOTIFY_CONNECTION] = next.notifyConnection
             prefs[SKIPPED_VERSION] = next.skippedVersion.orEmpty()
             prefs[ACTIVE_PROFILE] = next.activeProfileId.orEmpty()
         }
@@ -187,6 +195,10 @@ class SettingsStore(context: Context) {
         val SEND_ON_ENTER = booleanPreferencesKey("send_on_enter")
         val ALLOW_SCREENSHOTS = booleanPreferencesKey("allow_screenshots")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val KEEP_ALIVE_BACKGROUND = booleanPreferencesKey("keep_alive_background")
+        val NOTIFY_TURNS = booleanPreferencesKey("notify_turns")
+        val NOTIFY_ATTENTION = booleanPreferencesKey("notify_attention")
+        val NOTIFY_CONNECTION = booleanPreferencesKey("notify_connection")
         val SKIPPED_VERSION = stringPreferencesKey("skipped_version")
         val LAST_UPDATE_CHECK = longPreferencesKey("last_update_check")
     }

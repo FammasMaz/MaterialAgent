@@ -21,8 +21,10 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Brightness6
+import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Link
@@ -30,10 +32,12 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MotionPhotosOn
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.ViewStream
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -299,6 +303,58 @@ fun SettingsScreen(
                     onCheckedChange = { value ->
                         cue(HapticCue.TOGGLE)
                         app.update { it.copy(allowScreenshots = value) }
+                    },
+                )
+            }
+        }
+
+        // ── Background & notifications ─────────────────────────────────────
+        item { SectionHeader("Background & notifications") }
+        item {
+            SettingsGroup {
+                SwitchRow(
+                    icon = Icons.Rounded.CloudSync,
+                    title = "Keep connection alive in background",
+                    subtitle = "Run a quiet foreground service so replies and " +
+                        "questions still arrive while the app is away",
+                    checked = settings.keepAliveInBackground,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.TOGGLE)
+                        app.update { it.copy(keepAliveInBackground = value) }
+                    },
+                )
+                SettingsDivider()
+                SwitchRow(
+                    icon = Icons.Rounded.Forum,
+                    title = "Notify on replies",
+                    subtitle = "A notification when the agent finishes a turn in the background",
+                    checked = settings.notifyTurns,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.TOGGLE)
+                        app.update { it.copy(notifyTurns = value) }
+                    },
+                )
+                SettingsDivider()
+                SwitchRow(
+                    icon = Icons.Rounded.PriorityHigh,
+                    title = "Notify when the agent needs you",
+                    subtitle = "Approvals and questions expire quickly — these come through " +
+                        "even if reply notifications are off",
+                    checked = settings.notifyAttention,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.TOGGLE)
+                        app.update { it.copy(notifyAttention = value) }
+                    },
+                )
+                SettingsDivider()
+                SwitchRow(
+                    icon = Icons.Rounded.WifiOff,
+                    title = "Notify on connection changes",
+                    subtitle = "When the link to the server drops or recovers. Noisy — off by default",
+                    checked = settings.notifyConnection,
+                    onCheckedChange = { value ->
+                        cue(HapticCue.TOGGLE)
+                        app.update { it.copy(notifyConnection = value) }
                     },
                 )
             }

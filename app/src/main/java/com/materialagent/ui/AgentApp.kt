@@ -64,7 +64,7 @@ private val topLevelRoutes = setOf(Routes.SESSIONS, Routes.CAPABILITIES, Routes.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun AgentApp() {
+fun AgentApp(openSessionOnLaunch: String? = null) {
     val app = containerViewModel { AgentViewModel(it) }
     val settings by app.settings.collectAsStateWithLifecycle()
     val skin by app.skin.collectAsStateWithLifecycle()
@@ -107,6 +107,18 @@ fun AgentApp() {
             // No server, no inbox: send a first-time user straight to setup.
             if (loaded && profiles.isEmpty() && currentRoute == Routes.SESSIONS) {
                 nav.navigate(Routes.CONNECT) { launchSingleTop = true }
+            }
+        }
+
+        // A notification tap named a conversation: open it once the graph is up.
+        // Guarded on the id so a recomposition does not re-navigate forever, and
+        // on `loaded` so the sessions list exists to navigate from.
+        LaunchedEffect(openSessionOnLaunch, loaded) {
+            val id = openSessionOnLaunch ?: return@LaunchedEffect
+            if (!loaded) return@LaunchedEffect
+            nav.navigate(Routes.chat(id)) {
+                launchSingleTop = true
+                popUpTo(Routes.SESSIONS) { saveState = true }
             }
         }
 

@@ -47,6 +47,27 @@ class AppContainer(context: Context) {
      */
     val attachments = AttachmentSender(connection, context.contentResolver)
     val chat = ChatController(connection, sessions, attachments, scope)
+
+    /**
+     * The app-wide notifier. The service builds its own per-start instance for
+     * observation, but foreground state and the notification context are shared
+     * here so the Activity's lifecycle and the service stay consistent.
+     */
+    val notifier = com.materialagent.notify.AgentNotifier(settings, chat, connection)
+
+    /** Starts/stops the background keep-alive when the app leaves/returns. */
+    fun onAppForegroundChanged(inForeground: Boolean) {
+        notifier.markInForeground(inForeground)
+        val context = notifier.context ?: return
+        val keepAlive = runCatching { kotlinx.coroutines.runBlocking { settings.snapshot().keepAliveInBackground } }
+            .getOrDefault(true)
+        if (!inForeground && keepAlive && connection.status.value.isConnected) {
+            com.materialagent.notify.NotifyForegroundService.start(context)
+        } else if (inForeground) {
+            com.materialagent.notify.NotifyForegroundService.stop(context)
+        }
+    }
+
     val updates = UpdateManager(
         context = context,
         settings = settings,
