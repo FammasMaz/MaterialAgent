@@ -729,6 +729,7 @@ private fun ChatTopBar(
 }
 
 /** A live "still working" row that ticks, so a long turn never looks stuck. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun WorkingIndicator(elapsed: Double?) {
     Row(
@@ -742,7 +743,10 @@ private fun WorkingIndicator(elapsed: Double?) {
         Column {
             Text(
                 text = "Agent is working",
-                style = MaterialTheme.typography.labelLarge,
+                // The transcript's agent label: the one line in a running turn that
+                // names who is speaking, so it takes M3E's emphasized label rather
+                // than the baseline one it shares with the timer underneath it.
+                style = MaterialTheme.typography.labelLargeEmphasized,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (elapsed != null) {

@@ -382,7 +382,7 @@ fun ReasoningBlock(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = if (streaming) "Reasoning…" else "Reasoning",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMediumEmphasized,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
@@ -481,7 +481,7 @@ fun ToolCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = tool.name.ifBlank { "tool" },
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelLargeEmphasized,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -612,7 +612,7 @@ fun TodosCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = "Plan",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     modifier = Modifier.weight(1f),
                 )
                 MetaPill(text = "$done of ${todos.size}")
@@ -711,7 +711,7 @@ fun InteractionCard(
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = request.title.ifBlank { "The agent needs an answer" },
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     modifier = Modifier.weight(1f),
                 )
                 if (request.isPending) {

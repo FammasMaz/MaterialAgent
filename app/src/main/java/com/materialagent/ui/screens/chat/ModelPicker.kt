@@ -54,7 +54,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -455,8 +454,15 @@ private fun ModelRow(
         ) {
             Text(
                 text = option.model,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                // M3E's emphasized style for the selected name, rather than a hand-
+                // rolled `FontWeight.SemiBold` on the baseline style: the type scale
+                // already owns "one step heavier", and it keeps the token the same
+                // place the rest of the app's emphasis comes from.
+                style = if (isSelected) {
+                    MaterialTheme.typography.bodyMediumEmphasized
+                } else {
+                    MaterialTheme.typography.bodyMedium
+                },
                 color = nameColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
