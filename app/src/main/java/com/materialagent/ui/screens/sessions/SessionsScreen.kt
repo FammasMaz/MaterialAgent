@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Wifi
@@ -175,6 +176,11 @@ fun SessionsScreen(
                             status = status,
                             onConnect = onConnect,
                             onRetry = app::retry,
+                            onRefresh = {
+                                cue(HapticCue.REFRESH)
+                                refreshing = true
+                                viewModel.refresh()
+                            },
                         )
                         Spacer(Modifier.height(14.dp))
                         SearchField(
@@ -341,6 +347,7 @@ private fun HeaderRow(
     status: ConnectionStatus,
     onConnect: () -> Unit,
     onRetry: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -396,6 +403,14 @@ private fun HeaderRow(
             }
             if (status is ConnectionStatus.Failed) {
                 TextButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) { Text("Retry") }
+            } else if (status is ConnectionStatus.Connected) {
+                // M3 requires a pull-to-refresh gesture to have a single-pointer
+                // alternative, and the pull was the only way to refresh this list.
+                // This is the same control the capabilities header already carries
+                // for the same reason, firing the same cue.
+                IconButton(onClick = onRefresh, shapes = IconButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = "Refresh conversations")
+                }
             }
         }
     }
