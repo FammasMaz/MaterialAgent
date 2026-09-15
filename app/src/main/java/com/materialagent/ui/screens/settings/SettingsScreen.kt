@@ -693,8 +693,9 @@ private fun SwitchRow(
             // label; leaving all of that on the Switch instead announced a bare
             // "on, switch" beside two lines of text the screen reader read out
             // separately, with nothing tying them together. The ripple and the
-            // state layer move to the row with it, which is also the bigger and
-            // therefore correct target for a 44dp control in a 68dp row.
+            // state layer move to the row with it, which is also the larger and
+            // therefore correct target: the switch reserves M3's 48dp minimum for
+            // itself and the row is taller than that.
             .toggleable(
                 value = checked,
                 role = Role.Switch,
