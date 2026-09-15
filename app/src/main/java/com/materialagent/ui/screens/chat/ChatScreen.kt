@@ -78,6 +78,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.scale
@@ -364,24 +365,7 @@ fun ChatScreen(
                 }
             }
 
-            PullRevealPanel(
-                state = reveal,
-                transcript = transcript,
-                summary = summary,
-                onCue = cue,
-                onCollapse = {
-                    cue(HapticCue.UI_ACTION)
-                    reveal.collapse(revealSpec)
-                },
-                // The card the pull brings down is what ripples, so the trigger
-                // and the reduced-motion gate are handed to the panel rather than
-                // wrapped around the transcript.
-                rippleTrigger = ripple,
-                rippleEnabled = !reducedMotion,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-
-            Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.weight(1f).clipToBounds()) {
                 when {
                     transcript.loadingHistory && entries.isEmpty() ->
                         LoadingBlock("Reopening the conversation…")
@@ -488,6 +472,27 @@ fun ChatScreen(
                         Icon(Icons.Rounded.ArrowDownward, contentDescription = "Jump to latest")
                     }
                 }
+
+                // The card the pull brings down is what ripples, so the trigger and
+                // the reduced-motion gate are handed to the panel rather than wrapped
+                // around the transcript. Drawn last so it sits over the list, and
+                // clipped by the box above, which is what hides it above the top
+                // edge until the pull starts moving it down.
+                PullRevealPanel(
+                    state = reveal,
+                    transcript = transcript,
+                    summary = summary,
+                    onCue = cue,
+                    onCollapse = {
+                        cue(HapticCue.UI_ACTION)
+                        reveal.collapse(revealSpec)
+                    },
+                    rippleTrigger = ripple,
+                    rippleEnabled = !reducedMotion,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 16.dp),
+                )
             }
 
             PendingAttachmentsBubble(
