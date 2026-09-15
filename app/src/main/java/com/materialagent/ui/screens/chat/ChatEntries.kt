@@ -448,7 +448,13 @@ fun ToolCard(
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { expanded = !expanded },
+                // The row is the whole tap target, and its content is only as tall as
+                // the 24dp icon or as many text lines as the tool has — under M3's
+                // 48dp minimum for every tool with no summary line. `clickable` does
+                // not expand a touch target on its own.
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .clickable { expanded = !expanded },
             ) {
                 Box(
                     modifier = Modifier.size(24.dp),
