@@ -429,7 +429,10 @@ fun SettingsScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("MaterialAgent", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            text = "Version ${BuildConfig.VERSION_NAME} · agent $serverVersion",
+                            // Hermes does not report a version in `gateway.ready`, so this
+                            // stays absent rather than printing "agent null".
+                            text = "Version ${BuildConfig.VERSION_NAME}" +
+                                (serverVersion?.let { " · agent $it" } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
