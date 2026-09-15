@@ -5,10 +5,10 @@ package com.materialagent.ui.screens.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -313,6 +313,9 @@ fun AssistantBlock(
  * Sized from the line it trails rather than in fixed dp, so that at large font
  * scale it grows with the text instead of reading as a stray dot.
  */
+/** How long one half of the caret's blink takes. */
+private const val CARET_BLINK_MS = 700
+
 @Composable
 private fun StreamingCaret(style: TextStyle = MaterialTheme.typography.bodyLarge) {
     // A caret blinking forever is the thing reduced motion is asking us not to
@@ -325,7 +328,11 @@ private fun StreamingCaret(style: TextStyle = MaterialTheme.typography.bodyLarge
         val blink by transition.animateFloat(
             initialValue = 1f,
             targetValue = 0.15f,
-            animationSpec = infiniteRepeatable(tween(700), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse),
+            // A blink has to be a duration-based spec: `infiniteRepeatable` rejects the
+            // scheme's effects spec outright, because that spec is a spring and a spring
+            // has no duration to repeat at. Reduced motion still keeps the caret lit
+            // instead of pulsing, which is the part that matters.
+            animationSpec = infiniteRepeatable(tween(CARET_BLINK_MS), repeatMode = androidx.compose.animation.core.RepeatMode.Reverse),
             label = "caretAlpha",
         )
         blink
