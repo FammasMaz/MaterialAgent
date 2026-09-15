@@ -28,12 +28,14 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -83,7 +85,7 @@ import java.util.concurrent.TimeUnit
  * stays correct when the agent renames a conversation mid-turn — the refresh is
  * driven by the gateway's `sessions.changed` events, not by the user pulling.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SessionsScreen(
     app: AgentViewModel,
@@ -310,20 +312,26 @@ fun SessionsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    cue(HapticCue.DESTRUCTIVE)
-                    viewModel.delete(session.id)
-                    deleting = null
-                }) { Text("Delete") }
+                TextButton(
+                    onClick = {
+                        cue(HapticCue.DESTRUCTIVE)
+                        viewModel.delete(session.id)
+                        deleting = null
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                ) { Text("Delete") }
             },
             dismissButton = {
-                TextButton(onClick = { deleting = null }) { Text("Keep") }
+                TextButton(onClick = { deleting = null }, shapes = ButtonDefaults.shapes()) {
+                    Text("Keep")
+                }
             },
             icon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun HeaderRow(
     connectedName: String?,
@@ -376,18 +384,21 @@ private fun HeaderRow(
                         }
 
                         ConnectionStatus.Idle -> {
-                            TextButton(onClick = onConnect) { Text("Connect a server") }
+                            TextButton(onClick = onConnect, shapes = ButtonDefaults.shapes()) {
+                                Text("Connect a server")
+                            }
                         }
                     }
                 }
             }
             if (status is ConnectionStatus.Failed) {
-                TextButton(onClick = onRetry) { Text("Retry") }
+                TextButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) { Text("Retry") }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SearchField(
     query: String,
@@ -402,7 +413,7 @@ private fun SearchField(
         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
-                IconButton(onClick = onClear) {
+                IconButton(onClick = onClear, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Rounded.Close, contentDescription = "Clear search")
                 }
             }
@@ -412,6 +423,7 @@ private fun SearchField(
     )
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SessionCard(
     session: SessionSummary,
@@ -498,7 +510,7 @@ private fun SessionCard(
             }
 
             Box {
-                IconButton(onClick = { menuOpen = true }) {
+                IconButton(onClick = { menuOpen = true }, shapes = IconButtonDefaults.shapes()) {
                     Icon(Icons.Rounded.MoreVert, contentDescription = "Conversation actions")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -609,6 +621,7 @@ private fun runCountLabel(count: Int, isCron: Boolean): String = if (isCron) {
     "$count session${if (count == 1) "" else "s"}"
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun RenameDialog(
     initial: String,
@@ -633,9 +646,12 @@ private fun RenameDialog(
             TextButton(
                 onClick = { onConfirm(text.trim()) },
                 enabled = text.isNotBlank(),
+                shapes = ButtonDefaults.shapes(),
             ) { Text("Save") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
+        },
         icon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
     )
 }

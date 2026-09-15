@@ -162,13 +162,16 @@ private fun AvailableContent(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onSkipVersion) { Text("Skip this version") }
+        TextButton(onClick = onSkipVersion, shapes = ButtonDefaults.shapes()) {
+            Text("Skip this version")
+        }
         // `shapes`, not `shape`: M3E's button morphs its outline while pressed, and
         // the single-shape overload pins a static outline instead.
         Button(onClick = onUpdate, shapes = ButtonDefaults.shapes()) { Text("Update") }
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun DownloadingContent(
     update: AppUpdate,
@@ -190,7 +193,7 @@ private fun DownloadingContent(
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
         }
-        TextButton(onClick = onCancelDownload) { Text("Cancel") }
+        TextButton(onClick = onCancelDownload, shapes = ButtonDefaults.shapes()) { Text("Cancel") }
     }
 
     Spacer(Modifier.height(8.dp))
@@ -231,7 +234,7 @@ private fun ReadyContent(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onDismiss) { Text("Later") }
+        TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Later") }
         Button(onClick = onInstall, shapes = ButtonDefaults.shapes()) { Text("Install") }
     }
 }

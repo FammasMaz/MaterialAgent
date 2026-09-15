@@ -292,7 +292,7 @@ fun AssistantBlock(
                         modifier = Modifier.weight(1f),
                     )
                     if (onRetry != null) {
-                        TextButton(onClick = onRetry) { Text("Retry") }
+                        TextButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) { Text("Retry") }
                     }
                 }
             }
@@ -785,7 +785,10 @@ fun InteractionCard(
                             // press; the single-shape overload pins a static outline.
                             shapes = ButtonDefaults.shapes(),
                         ) { Text("Send") }
-                        TextButton(onClick = { onAnswer("cancel") }) { Text("Cancel") }
+                        TextButton(
+                            onClick = { onAnswer("cancel") },
+                            shapes = ButtonDefaults.shapes(),
+                        ) { Text("Cancel") }
                     }
                 }
 
@@ -809,6 +812,7 @@ fun InteractionCard(
                                     onAnswer(choice)
                                 },
                                 modifier = Modifier.fillMaxWidth(),
+                                shapes = ButtonDefaults.shapes(),
                             ) { Text(label) }
                         } else {
                             Button(

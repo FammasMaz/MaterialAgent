@@ -565,11 +565,15 @@ private fun ConnectionCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 when (status) {
-                    is ConnectionStatus.Connected -> TextButton(onClick = onDisconnect) {
-                        Text("Disconnect")
-                    }
+                    is ConnectionStatus.Connected ->
+                        TextButton(onClick = onDisconnect, shapes = ButtonDefaults.shapes()) {
+                            Text("Disconnect")
+                        }
 
-                    is ConnectionStatus.Failed -> TextButton(onClick = onRetry) { Text("Retry") }
+                    is ConnectionStatus.Failed ->
+                        TextButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) {
+                            Text("Retry")
+                        }
 
                     ConnectionStatus.Idle -> Button(
                         onClick = onConnect,
@@ -776,6 +780,7 @@ private fun UpdateCard(
                     TextButton(
                         onClick = onCheck,
                         enabled = BuildConfig.EXTERNAL_UPDATES_ENABLED && !busy,
+                        shapes = ButtonDefaults.shapes(),
                     ) { Text("Check for updates") }
 
                     Spacer(Modifier.weight(1f))
@@ -786,9 +791,10 @@ private fun UpdateCard(
                             shapes = ButtonDefaults.shapes(),
                         ) { Text("Update") }
 
-                        is UpdateState.Downloading -> TextButton(onClick = onCancelDownload) {
-                            Text("Cancel")
-                        }
+                        is UpdateState.Downloading ->
+                            TextButton(onClick = onCancelDownload, shapes = ButtonDefaults.shapes()) {
+                                Text("Cancel")
+                            }
 
                         is UpdateState.ReadyToInstall -> Button(
                             onClick = onInstall,
@@ -800,7 +806,9 @@ private fun UpdateCard(
                 }
 
                 if (state is UpdateState.Available) {
-                    TextButton(onClick = onSkipVersion) { Text("Skip this version") }
+                    TextButton(onClick = onSkipVersion, shapes = ButtonDefaults.shapes()) {
+                        Text("Skip this version")
+                    }
                 }
             }
         }

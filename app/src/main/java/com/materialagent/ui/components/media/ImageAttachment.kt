@@ -19,9 +19,12 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Image
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -88,6 +91,7 @@ private const val MAX_ASPECT = 2.0f
  * milliseconds of work that would otherwise land as a dropped frame in the
  * middle of a scroll.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ImageAttachment(
     ref: MediaRef,
@@ -157,7 +161,9 @@ fun ImageAttachment(
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                     )
-                    TextButton(onClick = { attempt++ }) { Text("Try again") }
+                    TextButton(onClick = { attempt++ }, shapes = ButtonDefaults.shapes()) {
+                        Text("Try again")
+                    }
                 }
             }
 
@@ -206,6 +212,7 @@ fun ImageAttachment(
  * A dialog without the platform's default width inset, so it really does cover
  * the screen instead of floating in a card.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ImageViewer(
     image: ImageBitmap,
@@ -254,6 +261,7 @@ private fun ImageViewer(
 
             IconButton(
                 onClick = onDismiss,
+                shapes = IconButtonDefaults.shapes(),
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .systemBarsPadding()

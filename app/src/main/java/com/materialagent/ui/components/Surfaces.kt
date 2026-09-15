@@ -80,9 +80,9 @@ fun ErrorBanner(
                 modifier = Modifier.weight(1f),
             )
             if (onRetry != null) {
-                TextButton(onClick = onRetry) { Text("Retry") }
+                TextButton(onClick = onRetry, shapes = ButtonDefaults.shapes()) { Text("Retry") }
             }
-            TextButton(onClick = onDismiss) { Text("Dismiss") }
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("Dismiss") }
         }
     }
 }
@@ -116,7 +116,7 @@ fun NoticeBanner(
                 modifier = Modifier.weight(1f),
             )
             if (onDismiss != null) {
-                TextButton(onClick = onDismiss) { Text("OK") }
+                TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) { Text("OK") }
             }
         }
     }
@@ -237,7 +237,9 @@ fun EmptyState(
             ) { Text(actionLabel) }
         }
         if (secondaryActionLabel != null && onSecondaryAction != null) {
-            TextButton(onClick = onSecondaryAction) { Text(secondaryActionLabel) }
+            TextButton(onClick = onSecondaryAction, shapes = ButtonDefaults.shapes()) {
+                Text(secondaryActionLabel)
+            }
         }
     }
 }
