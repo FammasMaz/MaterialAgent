@@ -15,8 +15,8 @@ android {
         applicationId = "com.materialagent"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.0.0-beta.9"
+        versionCode = 12
+        versionName = "1.0.0-beta.10"
 
         // This app ships from GitHub Releases and nowhere else. The flag exists
         // so a build that must not self-update (a store build, a CI artefact)
