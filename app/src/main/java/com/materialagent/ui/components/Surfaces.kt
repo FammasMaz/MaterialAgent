@@ -1,11 +1,7 @@
 package com.materialagent.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -36,7 +32,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.materialagent.ui.theme.alphaSpec
 import com.materialagent.ui.theme.AgentShapes
 import com.materialagent.ui.theme.contentSizeSpec
 
@@ -275,16 +270,4 @@ fun GroupDivider(modifier: Modifier = Modifier) {
         modifier = modifier.padding(horizontal = 4.dp),
         color = MaterialTheme.colorScheme.outlineVariant,
     )
-}
-
-/** Reveals content with a soft fade instead of a hard pop. */
-@Composable
-fun SoftVisibility(visible: Boolean, content: @Composable () -> Unit) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(animationSpec = alphaSpec()),
-        exit = fadeOut(animationSpec = alphaSpec()),
-    ) {
-        Box { content() }
-    }
 }
