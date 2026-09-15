@@ -4,7 +4,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -448,7 +447,10 @@ private fun SessionCard(
     Surface(
         onClick = onOpen,
         enabled = !busy,
-        shape = RoundedCornerShape(24.dp),
+        // A step of the app's scale rather than a one-off 24dp: it sits beside
+        // the settings cards, and two list screens' near-identical containers
+        // differing by 2dp reads as an accident.
+        shape = MaterialTheme.shapes.large,
         color = container,
         modifier = Modifier
             .fillMaxWidth()
@@ -638,7 +640,9 @@ private fun RenameDialog(
                 onValueChange = { text = it },
                 label = { Text("Title") },
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
+                // Every other field is `medium` or the pill; the dialog's own
+                // 32dp is the *container's* radius, not the field's.
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
         },
