@@ -83,7 +83,6 @@ class HermesClient(
     @Volatile private var lastInboundAt: Long = 0
     @Volatile private var inboundFrames: Long = 0
     @Volatile private var lastInboundAtBoot: Long = 0
-    @Volatile private var connectedUrl: String? = null
     private var heartbeatJob: Job? = null
     private val closing = AtomicBoolean(false)
 
@@ -119,7 +118,6 @@ class HermesClient(
         disconnect(reason = "reconnect")
         closing.set(false)
         authRejected = false
-        connectedUrl = wsUrl
         _state.value = ConnectionState.CONNECTING
 
         val opened = CompletableDeferred<Unit>()
