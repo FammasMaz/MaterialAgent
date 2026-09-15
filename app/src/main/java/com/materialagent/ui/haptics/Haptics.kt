@@ -56,8 +56,9 @@ class Haptics(context: Context) {
     private fun build(cue: HapticCue, level: HapticLevel): VibrationEffect {
         val s = level.strength()
         return when (cue) {
-            // A single clean tick: "heard you", or "that tool finished".
-            HapticCue.SENT, HapticCue.TOOL_DONE -> effect(s, listOf(0L))
+            // A single clean tick: "heard you", "that tool finished", or "your download
+            // is saved and opening".
+            HapticCue.SENT, HapticCue.TOOL_DONE, HapticCue.DOWNLOAD_READY -> effect(s, listOf(0L))
 
             // A stop, not a receipt. SENT is the most-used cue in the app — every
             // submit, every navigation tap, every segment — so the one cue it must

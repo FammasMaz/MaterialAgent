@@ -151,7 +151,7 @@ internal fun rememberAttachmentDownload(
                     .onSuccess { file ->
                         size.value = file.length()
                         if (openDownloaded(context.applicationContext, file, mimeOf(ref))) {
-                            cue(HapticCue.TOOL_DONE)
+                            cue(HapticCue.DOWNLOAD_READY)
                         } else {
                             error.value = "Saved to the cache, but no app here can open it."
                         }

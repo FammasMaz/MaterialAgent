@@ -69,6 +69,15 @@ enum class HapticCue {
 
     /** The transcript's pull gave way and revealed the conversation info. */
     REVEAL,
+
+    /**
+     * A file the *user* asked to download is saved and being handed to another app.
+     *
+     * Not `TOOL_DONE`: that one says the agent's own command finished, and the download
+     * chip used it for a tap the user made, which is the same mix-up the four cues above
+     * exist to undo.
+     */
+    DOWNLOAD_READY,
 }
 
 /**
