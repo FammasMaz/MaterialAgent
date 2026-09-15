@@ -51,7 +51,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.materialagent.core.model.MediaRef
 import com.materialagent.data.HapticCue
 import com.materialagent.ui.rememberCue
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.alphaSpec
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -117,7 +117,7 @@ fun ImageAttachment(
             targetValue = if (state is ImageState.Ready) 1f else 0f,
             // The app's effects spec: an alpha that overshoots reads as a flicker,
             // so this is deliberately not one of the spatial springs.
-            animationSpec = ExpressiveMotion.Specs.alpha,
+            animationSpec = alphaSpec(),
             label = "imageAlpha",
         )
         when (val current = state) {

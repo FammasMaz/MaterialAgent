@@ -77,7 +77,7 @@ import com.materialagent.ui.components.SectionHeader
 import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.UpdateProgressBar
 import com.materialagent.ui.rememberCue
-import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.colorSpec
 import com.materialagent.ui.theme.trayGeometry
 import com.materialagent.ui.theme.LocalScrollHaptics
 import com.materialagent.ui.theme.availablePalettes
@@ -517,7 +517,7 @@ private fun ConnectionCard(
             is ConnectionStatus.Failed -> MaterialTheme.colorScheme.errorContainer
             else -> MaterialTheme.colorScheme.surfaceContainerHigh
         },
-        animationSpec = ExpressiveMotion.Specs.color,
+        animationSpec = colorSpec(),
         label = "connectionContainer",
     )
 

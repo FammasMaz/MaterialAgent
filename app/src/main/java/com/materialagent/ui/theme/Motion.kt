@@ -70,23 +70,10 @@ fun alphaSpec(): FiniteAnimationSpec<Float> = MaterialTheme.motionScheme.default
 fun colorSpec(): FiniteAnimationSpec<Color> = MaterialTheme.motionScheme.defaultEffectsSpec()
 
 /**
- * Specs for the two screens another agent still owns, which reference
- * `ExpressiveMotion.Specs.*` and cannot be edited here.
- *
- * These are built from `MotionScheme.expressive()` and so match the theme exactly
- * in the default case, but — being non-composable — they cannot follow the
- * reduced-motion branch. `SessionsScreen` and `SettingsScreen` therefore still
- * animate with expressive specs under reduced motion; moving them onto
- * [alphaSpec]/[colorSpec] is the follow-up that closes that gap.
+ * Press scale, which is a value rather than a spec: a spring can be read from the
+ * scheme, but a chosen scale cannot.
  */
 object ExpressiveMotion {
-    private val scheme = MotionScheme.expressive()
-
-    object Specs {
-        val alpha: FiniteAnimationSpec<Float> = scheme.fastEffectsSpec()
-        val color: FiniteAnimationSpec<Color> = scheme.fastEffectsSpec()
-    }
-
     /** Press scale used across the app. */
     object Values {
         const val PRESSED_SCALE = 0.96f

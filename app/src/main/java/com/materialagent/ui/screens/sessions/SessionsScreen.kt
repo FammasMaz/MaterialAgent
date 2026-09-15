@@ -69,8 +69,9 @@ import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.ExpressiveToggleGroup
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.AgentShapes
-import com.materialagent.ui.theme.ExpressiveMotion
 import com.materialagent.ui.theme.LocalScrollHaptics
+import com.materialagent.ui.theme.alphaSpec
+import com.materialagent.ui.theme.colorSpec
 import com.materialagent.ui.theme.placementSpec
 import com.materialagent.ui.theme.scaleSpec
 import java.text.DateFormat
@@ -262,7 +263,7 @@ fun SessionsScreen(
                                         viewModel.toggleGroup(row.groupKey)
                                     },
                                     modifier = Modifier.animateItem(
-                                        fadeInSpec = ExpressiveMotion.Specs.alpha,
+                                        fadeInSpec = alphaSpec(),
                                         placementSpec = placementSpec(),
                                         fadeOutSpec = null,
                                     ),
@@ -270,7 +271,7 @@ fun SessionsScreen(
 
                                 is SessionListItem.Row -> Box(
                                     modifier = Modifier.animateItem(
-                                        fadeInSpec = ExpressiveMotion.Specs.alpha,
+                                        fadeInSpec = alphaSpec(),
                                         placementSpec = placementSpec(),
                                         fadeOutSpec = null,
                                     ),
@@ -435,12 +436,12 @@ private fun SessionCard(
     var menuOpen by remember { mutableStateOf(false) }
     val dim by animateFloatAsState(
         targetValue = if (busy) 0.5f else 1f,
-        animationSpec = ExpressiveMotion.Specs.alpha,
+        animationSpec = alphaSpec(),
         label = "busyDim",
     )
     val container by animateColorAsState(
         targetValue = MaterialTheme.colorScheme.surfaceContainer,
-        animationSpec = ExpressiveMotion.Specs.color,
+        animationSpec = colorSpec(),
         label = "cardContainer",
     )
 
