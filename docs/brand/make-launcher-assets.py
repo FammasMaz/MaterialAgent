@@ -33,7 +33,7 @@ import sys
 
 from PIL import Image, ImageDraw
 
-CHROME = "/Users/user/.cloakbrowser/chromium-145.0.7632.109.2/Chromium.app/Contents/MacOS/Chromium"
+CHROME = "/Users/example/.cloakbrowser/chromium-145.0.7632.109.2/Chromium.app/Contents/MacOS/Chromium"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SVG = os.path.join(HERE, "wuxje01.svg")
 RES = os.path.abspath(os.path.join(HERE, "..", "..", "app", "src", "main", "res"))

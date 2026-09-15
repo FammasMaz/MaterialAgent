@@ -138,7 +138,7 @@ class NotifyDecisionTest {
             inForeground = false,
             settings = AppSettings(),
             reconnected = false,
-            serverName = "example",
+            serverName = "hermes-box",
         )
 
         assertFalse(plan.shouldNotify)
@@ -148,14 +148,14 @@ class NotifyDecisionTest {
     fun connectionOptInNotifiesOnLossAndRecovery() {
         val settings = AppSettings(notifyConnection = true)
 
-        val lost = NotifyDecision.forConnectionChange(false, settings, false, "example")
-        val back = NotifyDecision.forConnectionChange(false, settings, true, "example")
+        val lost = NotifyDecision.forConnectionChange(false, settings, false, "hermes-box")
+        val back = NotifyDecision.forConnectionChange(false, settings, true, "hermes-box")
 
         assertTrue(lost.shouldNotify)
         assertEquals(NotifyChannel.CONNECTION, lost.channel)
         assertTrue(back.shouldNotify)
         assertEquals(NotifyChannel.CONNECTION, back.channel)
-        assertEquals("example", back.title)
+        assertEquals("hermes-box", back.title)
     }
 
     @Test
@@ -164,7 +164,7 @@ class NotifyDecisionTest {
             inForeground = true,
             settings = AppSettings(notifyConnection = true),
             reconnected = false,
-            serverName = "example",
+            serverName = "hermes-box",
         )
 
         assertFalse(plan.shouldNotify)

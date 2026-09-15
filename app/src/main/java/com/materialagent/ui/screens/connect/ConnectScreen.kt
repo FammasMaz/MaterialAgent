@@ -254,7 +254,7 @@ fun ConnectScreen(
                         keyboardType = KeyboardType.Uri,
                         // A URL and a password are not prose. Leaving the default
                         // sentence capitalisation on quietly rewrites what the user
-                        // typed — "user" arrives as "User" — and the
+                        // typed — "someuser" arrives as "Someuser" — and the
                         // gateway answers "wrong username or password".
                         capitalization = KeyboardCapitalization.None,
                         autoCorrectEnabled = false,

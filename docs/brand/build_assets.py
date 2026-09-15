@@ -36,7 +36,7 @@ WORK = os.path.join(REPO, 'docs', 'brand', 'preview')
 BUILD = os.path.join(WORK, 'build')
 CHROMIUM = os.environ.get(
     'CHROMIUM',
-    '/Users/user/.cloakbrowser/chromium-145.0.7632.109.2/Chromium.app/Contents/MacOS/Chromium',
+    '/Users/example/.cloakbrowser/chromium-145.0.7632.109.2/Chromium.app/Contents/MacOS/Chromium',
 )
 
 # The illustration's own canvas, in SVG viewBox units, and the square resolution

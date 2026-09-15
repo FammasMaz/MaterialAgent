@@ -49,7 +49,7 @@ and filterable, including by capability.
 The app talks to a `hermes serve` instance you run. Nothing is bundled or hosted.
 
 1. **Address:** `host:port` of the gateway, e.g. `192.168.1.27:9119` or
-   `http://example.<tailnet>.ts.net:9119`. A path may be included; the client appends `/api/ws`
+   `http://<your-server>:9119`. A path may be included; the client appends `/api/ws`
    to derive the socket URL.
 2. **Auth method:** `Access token` (loopback/dev tokens) or `Password`.
 3. **Credentials:** with `Password`, the app signs in with a **username** and the dashboard
@@ -77,7 +77,7 @@ and leaves a "cancelled before it finished" banner that only Retry clears).
 
 ```bash
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home
-export ANDROID_HOME=/Users/user/Library/Android/sdk     # or wherever your SDK lives
+export ANDROID_HOME=/path/to/Android/sdk     # or wherever your SDK lives
 
 ./gradlew :app:assembleDebug       # -> app/build/outputs/apk/debug/app-debug.apk
 ./gradlew :app:testDebugUnitTest    # JVM suite; live tests skip without a gateway
