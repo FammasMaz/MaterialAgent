@@ -78,6 +78,7 @@ import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.components.UpdateProgressBar
 import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.ExpressiveMotion
+import com.materialagent.ui.theme.trayGeometry
 import com.materialagent.ui.theme.LocalScrollHaptics
 import com.materialagent.ui.theme.availablePalettes
 import com.materialagent.ui.theme.effectivePalette
@@ -521,7 +522,9 @@ private fun ConnectionCard(
     )
 
     Surface(
-        shape = RoundedCornerShape(26.dp),
+        // As round as the tray it holds plus the ring between them, so the two
+        // corners share a centre. See `AgentShapes.trayHostInset`.
+        shape = RoundedCornerShape(trayGeometry().hostCardRadius),
         color = container,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -587,10 +590,16 @@ private fun ConnectionCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun SettingsGroup(content: @Composable () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(26.dp),
+        // The groups below the connection card hold a fused tray, so this radius
+        // is derived from that tray rather than picked: a 28dp tray 16dp inside a
+        // 26dp card pulled away at the corners and read thin along the edges,
+        // which is the defect this fixes. `trayGeometry` grows it with the tray
+        // when a large font scale makes the items taller.
+        shape = RoundedCornerShape(trayGeometry().hostCardRadius),
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth(),
     ) {

@@ -1,7 +1,13 @@
 package com.materialagent.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -82,7 +88,25 @@ object AgentShapes {
      */
     val toggleItemHeight: Dp = 48.dp
     val toggleTrayInset: Dp = 4.dp
+
+    /**
+     * The tray's radius at [toggleItemHeight]; the live value for the current font
+     * scale comes from [trayGeometry]. Kept as the documented base case so the
+     * derivation below has a name.
+     */
     val toggleTray: Dp = toggleItemHeight / 2 + toggleTrayInset
+
+    /**
+     * The ring a card keeps around a tray it hosts.
+     *
+     * This is the number that makes the two concentric: a container whose corners
+     * are *concentric* with the tray inside it is exactly the tray's radius plus
+     * this ring, and it is the only ring the tray ever sits in (the Settings label
+     * column pushes the tray further in on the leading edge, where an oversized
+     * outer radius stops mattering). A card that hosts a tray therefore reads
+     * [ToggleTrayGeometry.hostCardRadius], never a hand-picked radius.
+     */
+    val trayHostInset: Dp = 16.dp
 
     /**
      * The composer's radius, animated between these two: tight while a turn is
@@ -98,4 +122,52 @@ object AgentShapes {
      */
     val composerActive = 20.dp
     val composerIdle = 26.dp
+}
+
+/**
+ * The radii a fused tray wants at the current font scale: the tray itself and a
+ * card that hosts it. Derived together because they are one decision.
+ *
+ * The item height `ToggleButton` settles on is a *floor* — [AgentShapes.toggleItemHeight]
+ * — plus whatever the label's line box needs, and the label grows with the font
+ * scale. The overflow guard in `ExpressiveToggleGroup` only ever measured width, so
+ * at a large font scale a label could be wider than nothing and still taller than
+ * the tray, and the tray — clipped to a fixed radius — cut it off. Growing the item
+ * is half the fix; the other half is that the items carry M3E's `CornerFull` (half
+ * their own height), so a tray that kept its radius would cut their rounded ends
+ * off instead. One height, then three radii: this one, the card's, and the ring
+ * between them.
+ *
+ * The vertical slack is the library's own padding for the item floor
+ * (`ButtonDefaults.contentPaddingFor`), so this tracks what `ToggleButton` is about
+ * to draw rather than guessing at it. Measured against the running app, the item
+ * settles at 48dp, 51.4dp and 71.4dp at font scales 1.5, 2.0 and 3.0; the floor
+ * passed to the item stays [AgentShapes.toggleItemHeight] because `ToggleButton`
+ * derives its own padding from whatever height it is offered, and offering it this
+ * estimate instead pushes the padding up again (72dp offered → 80dp drawn).
+ */
+data class ToggleTrayGeometry(
+    val trayRadius: Dp,
+    val hostCardRadius: Dp,
+)
+
+/** The tray and hosted-card radii for the current font scale. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+@ReadOnlyComposable
+fun trayGeometry(): ToggleTrayGeometry {
+    val lineHeight = MaterialTheme.typography.labelLarge.lineHeight
+    val lineHeightDp = if (lineHeight.isSp) {
+        with(LocalDensity.current) { lineHeight.toDp() }
+    } else {
+        0.dp
+    }
+    val padding = ButtonDefaults.contentPaddingFor(AgentShapes.toggleItemHeight)
+    val verticalPadding = padding.calculateTopPadding() + padding.calculateBottomPadding()
+    val itemHeight = maxOf(AgentShapes.toggleItemHeight, lineHeightDp + verticalPadding)
+    val trayRadius = maxOf(AgentShapes.toggleTray, itemHeight / 2 + AgentShapes.toggleTrayInset)
+    return ToggleTrayGeometry(
+        trayRadius = trayRadius,
+        hostCardRadius = trayRadius + AgentShapes.trayHostInset,
+    )
 }

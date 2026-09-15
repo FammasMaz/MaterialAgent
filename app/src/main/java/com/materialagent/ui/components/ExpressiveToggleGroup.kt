@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isFinite
 
 import com.materialagent.ui.theme.AgentShapes
+import com.materialagent.ui.theme.trayGeometry
 
 /**
  * The expressive single-choice selector: one row of `ToggleButton`s whose shapes
@@ -56,11 +57,12 @@ import com.materialagent.ui.theme.AgentShapes
  * the segment is already chosen, and labels that are measured rather than trusted —
  * see [splitWouldClip].
  *
- * The tray and the items are one geometry, not two guesses: every item is pinned to
- * [AgentShapes.toggleItemHeight] and the tray's radius comes from
- * [AgentShapes.toggleTray], which is that height's full corner plus the inset. See
- * those two tokens for why a free-hand radius makes the ring thick at the corners
- * and thin along the edges.
+ * The tray and the items are one geometry, not two guesses: [trayGeometry] hands
+ * back the item's height and, from it, the tray's radius — the item's full corner
+ * plus the inset — so the ring between them is the same all the way round. See
+ * [AgentShapes.toggleItemHeight] for why a free-hand radius makes the ring thick at
+ * the corners and thin along the edges, and [trayGeometry] for why the height is a
+ * floor rather than a fixed value.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -111,13 +113,14 @@ fun ExpressiveToggleGroup(
 ) {
     if (options.isEmpty()) return
     val scroll = rememberScrollState()
+    val geometry = trayGeometry()
     BoxWithConstraints(modifier) {
         val splitEvenly = fillWidth && !splitWouldClip(options, maxWidth, contentPadding, itemPadding)
         Row(
             modifier = Modifier
                 .then(if (splitEvenly) Modifier.fillMaxWidth() else Modifier)
                 .then(if (splitEvenly) Modifier else Modifier.horizontalScroll(scroll))
-                .clip(RoundedCornerShape(AgentShapes.toggleTray))
+                .clip(RoundedCornerShape(geometry.trayRadius))
                 .background(containerColor)
                 .padding(contentPadding),
             horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -194,13 +197,15 @@ private fun RowScope.ToggleGroupItem(
     content: @Composable () -> Unit,
 ) {
     val size = if (expand) Modifier.weight(1f).fillMaxWidth() else Modifier
-    // An explicit height, not just a minimum: without it `ToggleButton` draws
-    // M3E's 40dp container inside a 48dp touch target, and those 8dp of slack
-    // make the tray's ring 8dp top and bottom against 4dp at the sides — so no
-    // single tray radius can sit concentrically with both. Pinning the box to
-    // the height the tray is built around keeps the ring even on all four sides.
+    // A floor, not a fixed height. At the base font scale it is taller than a
+    // one-line label needs, so nothing moves, but a label that scales past it
+    // grows the item instead of being cut off by it — the tray's radius is derived
+    // from the same prediction in [trayGeometry], so the two stay concentric. (The
+    // floor itself stays at the token: `ToggleButton` derives its own vertical
+    // padding from the height it is offered, so offering it its own expected height
+    // just asks for a taller button again. See [trayGeometry].)
     val modifier = size
-        .height(AgentShapes.toggleItemHeight)
+        .heightIn(min = AgentShapes.toggleItemHeight)
         .semantics { role = Role.RadioButton }
 
     // Two call sites rather than `contentPadding = itemPadding ?: default`: the
