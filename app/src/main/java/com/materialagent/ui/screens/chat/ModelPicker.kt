@@ -31,12 +31,12 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -587,9 +587,11 @@ private fun ModelListStatus(error: String?) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (error == null) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
+            // The M3E loading indicator rather than a 16dp circular spinner: it is
+            // the sanctioned replacement for indeterminate circular progress and, at
+            // this size, its polygon morph still reads as motion.
+            LoadingIndicator(
+                modifier = Modifier.size(18.dp),
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.width(12.dp))
