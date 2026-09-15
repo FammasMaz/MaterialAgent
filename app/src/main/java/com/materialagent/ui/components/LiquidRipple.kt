@@ -43,18 +43,20 @@ import com.materialagent.data.HapticCue
  *
  * Three things are deliberately *not* ported:
  *
- * 1. **Where it is mounted.** The reference wraps its whole main screen, because
- *    its pull expands a card in the middle of the list. Here the gesture pulls the
- *    transcript out from under a header, so the ripple belongs on the transcript
- *    alone ([ChatScreen] mounts it there): the panel arrives through the pull's
- *    own animation, and what the ripple shows is the messages *settling* under it.
- * 2. **Where it starts.** The reference passes the origin of its expanding card's
- *    text. Here the surface was pulled *down* from the top edge, so the wave starts
- *    at the top centre of the layer it is given — the displacement then travels
- *    downwards with the content, instead of radiating from a point nobody touched.
- * 3. **How it is gated.** The reference fires it whenever the pull passes the
+ * 1. **How it is gated.** The reference fires it whenever the pull passes the
  *    threshold. Here it is additionally silent under reduced motion, which the
  *    reference has no notion of.
+ *
+ * Where it is mounted is the point that has to be got right, and it is the same as
+ * the reference: **the card the pull is bringing down, and nothing else**
+ * ([PullRevealPanel] mounts it). The first port of this effect put it on the
+ * transcript instead, which read as the whole screen wobbling while a panel slid
+ * over it — the pull moves the card, so the card is the surface that ripples. The
+ * transcript is not touched at all.
+ *
+ * The origin defaults to the centre of the layer it is given, exactly as the
+ * reference's does (`size.width / 2f`, `size.height / 2f`), so the wave radiates
+ * out of the card rather than out of a corner of it.
  *
  * Everything is pure displacement of what is already on screen: no colour, shape
  * or size of any element changes, so a ripple over a settled transcript cannot
@@ -178,7 +180,9 @@ fun Modifier.liquidRipple(
             return@graphicsLayer
         }
 
-        val start = if (origin.isSpecified) origin else Offset(size.width / 2f, 0f)
+        // The reference's default: the centre of the layer. A pull that brings a
+        // card down should ripple out of that card, not out of a corner of it.
+        val start = if (origin.isSpecified) origin else Offset(size.width / 2f, size.height / 2f)
         shader.setFloatUniform("uResolution", size.width, size.height)
         shader.setFloatUniform("uOrigin", start.x, start.y)
         shader.setFloatUniform("uTime", time)

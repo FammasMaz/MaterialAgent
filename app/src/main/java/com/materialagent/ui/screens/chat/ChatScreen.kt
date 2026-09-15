@@ -111,7 +111,6 @@ import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
 import com.materialagent.ui.theme.alphaSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
-import com.materialagent.ui.components.liquidRipple
 import com.materialagent.ui.components.pullToReveal
 import com.materialagent.ui.components.PullRatchet
 import com.materialagent.ui.components.PullRipple
@@ -374,18 +373,15 @@ fun ChatScreen(
                     cue(HapticCue.UI_ACTION)
                     reveal.collapse(revealSpec)
                 },
+                // The card the pull brings down is what ripples, so the trigger
+                // and the reduced-motion gate are handed to the panel rather than
+                // wrapped around the transcript.
+                rippleTrigger = ripple,
+                rippleEnabled = !reducedMotion,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    // The transcript is what the gesture pulled, so it is what the
-                    // give ripples: a liquid wave through the messages as the
-                    // panel settles over them. Decorative, so reduced motion
-                    // leaves the surface still and keeps the reveal itself.
-                    .liquidRipple(trigger = ripple, enabled = !reducedMotion),
-            ) {
+            Box(modifier = Modifier.weight(1f)) {
                 when {
                     transcript.loadingHistory && entries.isEmpty() ->
                         LoadingBlock("Reopening the conversation…")
