@@ -34,9 +34,9 @@ import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.AltRoute
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.CallSplit
-import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -915,7 +915,10 @@ private fun Composer(
                         shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.heightIn(min = 48.dp),
                     ) {
-                        Icon(Icons.Rounded.AltRoute, contentDescription = null)
+                        // The auto-mirrored variant: the fork in the road points the
+                        // other way in an RTL layout, and the plain `Rounded.AltRoute`
+                        // is deprecated for exactly that reason.
+                        Icon(Icons.AutoMirrored.Rounded.AltRoute, contentDescription = null)
                         Spacer(Modifier.width(6.dp))
                         Text("Steer")
                     }
