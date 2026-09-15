@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.Extension
@@ -51,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
@@ -321,7 +323,16 @@ private fun UsageCard(usage: com.materialagent.core.model.Usage) {
             }
             LinearProgressIndicator(
                 progress = { usage.contextFraction },
-                modifier = Modifier.fillMaxWidth(),
+                // A progress indicator is a visual cue, so M3 requires an
+                // accessibility label naming the process and what it measures. The
+                // pills underneath it are separate semantics nodes and never reach
+                // the bar, which otherwise announced a bare percentage with no
+                // subject.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = "Context window ${usage.contextPercent}% used"
+                    },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 MetaPill(text = "${usage.contextUsed} / ${usage.contextMax}")
@@ -425,7 +436,20 @@ private fun ToolsetCard(
             .animateContentSize(animationSpec = contentSizeSpec()),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // As in the settings switch rows: on Compose the list item is
+                    // the control, so the card's header row carries the role, the
+                    // checked state and the toolset's own name as its label rather
+                    // than leaving an unlabelled switch floating beside the text.
+                    .toggleable(
+                        value = toolset.enabled,
+                        role = Role.Switch,
+                        onValueChange = onChange,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Icon(
                     Icons.Rounded.Extension,
                     contentDescription = null,
@@ -444,7 +468,8 @@ private fun ToolsetCard(
                         )
                     }
                 }
-                Switch(checked = toolset.enabled, onCheckedChange = onChange)
+                // Non-interactive: the header row above owns the toggle.
+                Switch(checked = toolset.enabled, onCheckedChange = null)
             }
             if (toolset.tools.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
