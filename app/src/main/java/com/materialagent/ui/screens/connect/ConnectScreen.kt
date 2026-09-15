@@ -241,13 +241,19 @@ fun ConnectScreen(
                     singleLine = true,
                     isError = address.isNotBlank() && !addressValid,
                     supportingText = {
-                        Text(
-                            when {
-                                address.isBlank() -> "Host and port where hermes serve is listening."
-                                addressValid -> normalized.orEmpty()
-                                else -> "That does not look like an address I can dial."
-                            },
-                        )
+                        when {
+                            address.isBlank() ->
+                                Text("Host and port where hermes serve is listening.")
+                            addressValid -> {
+                                // Echo the address back only when dialling will differ
+                                // from what was typed, so "host:9119" shows the scheme
+                                // it gains but a full URL is not repeated under itself.
+                                val dialable = normalized.orEmpty()
+                                if (dialable != address.trim()) Text(dialable)
+                            }
+                            else ->
+                                Text("That does not look like an address I can dial.")
+                        }
                     },
                     leadingIcon = { Icon(Icons.Rounded.Dns, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
