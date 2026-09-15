@@ -613,7 +613,7 @@ def wait_for_request(session, request_id, timeout=600):
     return entry, entry["event"].wait(timeout)
 
 
-def complete_turn(connection, session, body, running_info=True, with_title=None):
+def complete_turn(connection, session, body, running_info=False, with_title=None):
     session.running = False
     broadcast(connection, "message.complete", session, {
         "text": body,
