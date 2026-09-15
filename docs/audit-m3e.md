@@ -363,3 +363,24 @@ change; nothing requires rework of the theme.
 scroll and streaming haptics (5.3); the brand colour scheme including the fixed roles (6);
 every icon-only control's `contentDescription`, including the send button the earlier audit
 false-alarmed on (7.1).
+
+## Where the list above ended up
+
+Written after the four-scope conformance pass, so this file does not get re-audited for
+things that are already closed. Each line is a check against the current tree, not a claim.
+
+| Item | State | How it was checked |
+| --- | --- | --- |
+| 1 · Non-morphing buttons | closed | Paren-balanced scan of every button call site in `ui/`: 55 of 55 pass `= …Defaults.shapes()`; 0 missing |
+| 2 · Tray rounder than its card | closed | `SettingsGroup` derives `hostCardRadius` from `trayGeometry()`, which grows the card with the tray at large font scales |
+| 3 · Navigation pill target | closed | `NavBar` applies `minimumInteractiveComponentSize()` |
+| 3 · Navigation selection announced | in the nav/shell pass | — |
+| 4 · Attachment touch targets | closed — and the audit was wrong about the sizes | The 28dp/32dp/44dp figures are visual sizes; every one of the five media icon buttons applies `minimumInteractiveComponentSize()`, which is the documented idiom for a smaller visual with a 48dp target |
+| 5 · Wrong cue at the call site | closed | All 70-odd `HapticCue` call sites read against the cue table: opens and menus `UI_ACTION`, switches `TOGGLE`, refresh and update checks `REFRESH`, deletes `DESTRUCTIVE`, stop `INTERRUPTED`, a user's own download `DOWNLOAD_READY` |
+| 5 · Cues sharing a waveform | accepted | The light ticks (sent/toggle/refresh/action/ticks) differ by amplitude on one tick shape; every cue that carries meaning on its own — attention, turn complete, failure, destructive, tool start, reveal — has its own shape |
+| 6 · Reduced-motion leaks | closed | `ExpressiveMotion.Specs` is gone (only `Values.PRESSED_SCALE` remains), the three ambient loops and the caret's blink are gated on `MotionLevel.REDUCED`, and everything state-driven reads `MaterialTheme.motionScheme` |
+| 7 · Large-font toggle overflow | closed | `ExpressiveToggleGroup` uses `heightIn(min = …)`, a floor rather than the old fixed 48dp, and `trayGeometry()` predicts the measured item height so the tray stays concentric |
+| 8 · One-off radii | accepted as brand | The shape page permits customizing a corner-radius style; the values are deliberate, not accidental |
+| 9 · Server-skin contrast | closed | `readableOn` linearises sRGB and compares WCAG contrast ratios; it picks the ink with the better ratio rather than assuming white |
+| 10 · `SoftVisibility` | closed | Zero references in `ui/` |
+
