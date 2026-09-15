@@ -2,6 +2,7 @@ package com.materialagent.data
 
 import com.materialagent.core.AuthMode
 import com.materialagent.core.HermesClient
+import com.materialagent.core.HermesCredentialsException
 import com.materialagent.core.HermesJson
 import com.materialagent.core.HermesTransportException
 import com.materialagent.core.HermesUrl
@@ -295,7 +296,7 @@ class HermesConnection(
         return when (profile.authMode) {
             AuthMode.TOKEN -> {
                 if (secret.isBlank()) {
-                    throw HermesTransportException(
+                    throw HermesCredentialsException(
                         "No access token stored for ${profile.name}. Add one, or use password sign-in.",
                     )
                 }
@@ -304,7 +305,7 @@ class HermesConnection(
 
             AuthMode.PASSWORD -> {
                 if (secret.isBlank()) {
-                    throw HermesTransportException("No password stored for ${profile.name}.")
+                    throw HermesCredentialsException("No password stored for ${profile.name}.")
                 }
                 loginForTicket(profile, secret)
             }
@@ -334,7 +335,7 @@ class HermesConnection(
         http.newCall(loginRequest).execute().use { response ->
             when (response.code) {
                 in 200..299 -> Unit
-                401 -> throw HermesTransportException("Wrong username or password for ${profile.name}.")
+                401 -> throw HermesCredentialsException("Wrong username or password for ${profile.name}.")
                 429 -> throw HermesTransportException("Too many attempts. Wait a minute and try again.")
                 else -> throw HermesTransportException("Sign-in failed (HTTP ${response.code}).")
             }
@@ -345,7 +346,7 @@ class HermesConnection(
         val ticketRequest = Request.Builder().url(ticketUrl).post(EMPTY_BODY).build()
         val payload = http.newCall(ticketRequest).execute().use { response ->
             if (!response.isSuccessful) {
-                throw HermesTransportException(
+                throw HermesCredentialsException(
                     if (response.code == 401) {
                         "Sign-in expired. Try again."
                     } else {
@@ -489,6 +490,9 @@ class HermesConnection(
                     "handshake. Something between here and the gateway — a proxy, a " +
                     "tunnel, a firewall — is not passing the WebSocket through."
 
+            is HermesCredentialsException ->
+                error.message ?: "The server rejected the stored sign-in for ${profile.name}."
+
             is HermesTransportException ->
                 error.message ?: "Connection to ${profile.baseUrl} failed."
 
@@ -507,9 +511,10 @@ class HermesConnection(
                 append(")")
             }
         }
-        val needsCredentials = message.contains("token", ignoreCase = true) ||
-            message.contains("password", ignoreCase = true) ||
-            message.contains("sign-in", ignoreCase = true)
+        // Structural, not textual: only the failures the user can actually clear count.
+        // A sign-in problem that is really a restarting gateway has to keep retrying —
+        // sniffing the message for "sign-in" used to end the watcher right there.
+        val needsCredentials = error is HermesCredentialsException
         return ConnectionStatus.Failed(profile, message, needsCredentials)
     }
 

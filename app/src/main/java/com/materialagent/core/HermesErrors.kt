@@ -38,3 +38,16 @@ class HermesTransportException(
     message: String,
     cause: Throwable? = null,
 ) : Exception(message, cause)
+
+/**
+ * A failure only the user can clear: the gateway rejected the credential, or the
+ * profile has none stored.
+ *
+ * This is a type rather than a word in the message on purpose. The retry watcher
+ * stops for a rejected credential and keeps retrying everything else, so deciding by
+ * substring meant a transient `Could not check sign-in options (HTTP 503)` — a
+ * gateway restarting, say — ended the watcher for good. The app then sat on a
+ * connection error until the user tapped Retry by hand, which is exactly the
+ * "connection lost in the background" the watcher exists to prevent.
+ */
+class HermesCredentialsException(message: String) : Exception(message)
