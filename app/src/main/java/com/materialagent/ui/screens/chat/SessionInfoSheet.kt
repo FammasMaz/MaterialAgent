@@ -35,6 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -235,7 +237,12 @@ internal fun SessionInfoSheet(
     onCue: (HapticCue) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // No `skipPartiallyExpanded`: M3 caps a modal bottom sheet's initial vertical
+    // position at 50% of the screen height so the app behind it stays visible and
+    // selecting the drag handle can cycle the sheet through its preset heights.
+    // Skipping the partially-expanded anchor removed that height, so the sheet
+    // arrived covering the screen and the handle had nothing to toggle between.
+    val sheetState = rememberModalBottomSheetState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -398,7 +405,14 @@ private fun ContextBlock(window: ContextWindow?, usage: Usage?) {
             )
             LinearWavyProgressIndicator(
                 progress = { animated },
-                modifier = Modifier.fillMaxWidth(),
+                // The bar is a visual cue, so M3 requires an accessibility label
+                // naming the process and what it measures: the "Context" row above
+                // it is a separate node and never reaches the indicator itself.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = "Context window ${window.percent}% used"
+                    },
             )
             usage?.let { TokenBreakdown(it) }
         }
