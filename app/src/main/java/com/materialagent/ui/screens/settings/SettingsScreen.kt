@@ -807,7 +807,12 @@ private fun UpdateCard(
 
                     is UpdateState.Checking -> LoadingIndicator(
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
+                        // A loading indicator is a visual cue, so M3 requires an
+                        // accessibility label describing what is loading; the row's
+                        // own "Checking GitHub…" subtitle is a separate node.
+                        modifier = Modifier
+                            .size(18.dp)
+                            .semantics { contentDescription = "Checking for updates" },
                     )
 
                     is UpdateState.Failed -> Text(
