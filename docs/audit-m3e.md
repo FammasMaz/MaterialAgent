@@ -374,7 +374,7 @@ things that are already closed. Each line is a check against the current tree, n
 | 1 · Non-morphing buttons | closed | Paren-balanced scan of every button call site in `ui/`: 55 of 55 pass `= …Defaults.shapes()`; 0 missing |
 | 2 · Tray rounder than its card | closed | `SettingsGroup` derives `hostCardRadius` from `trayGeometry()`, which grows the card with the tray at large font scales |
 | 3 · Navigation pill target | closed | `NavBar` applies `minimumInteractiveComponentSize()` |
-| 3 · Navigation selection announced | in the nav/shell pass | — |
+| 3 · Navigation selection announced | closed — and the audit was looking at the wrong node | uiautomator on a live session shows the merged destination node carrying `selected="true"`; the inner label node does not, which is the same false-alarm shape as the send button's missing label. Nothing to fix. |
 | 4 · Attachment touch targets | closed — and the audit was wrong about the sizes | The 28dp/32dp/44dp figures are visual sizes; every one of the five media icon buttons applies `minimumInteractiveComponentSize()`, which is the documented idiom for a smaller visual with a 48dp target |
 | 5 · Wrong cue at the call site | closed | All 70-odd `HapticCue` call sites read against the cue table: opens and menus `UI_ACTION`, switches `TOGGLE`, refresh and update checks `REFRESH`, deletes `DESTRUCTIVE`, stop `INTERRUPTED`, a user's own download `DOWNLOAD_READY` |
 | 5 · Cues sharing a waveform | accepted | The light ticks (sent/toggle/refresh/action/ticks) differ by amplitude on one tick shape; every cue that carries meaning on its own — attention, turn complete, failure, destructive, tool start, reveal — has its own shape |
@@ -384,3 +384,43 @@ things that are already closed. Each line is a check against the current tree, n
 | 9 · Server-skin contrast | closed | `readableOn` linearises sRGB and compares WCAG contrast ratios; it picks the ink with the better ratio rather than assuming white |
 | 10 · `SoftVisibility` | closed | Zero references in `ui/` |
 
+
+## Icon-only controls and tooltips
+
+Material 3 pairs an icon button with a tooltip because a glyph on its own is a guess.
+The accessible name is the requirement and every icon-only control already carries
+one; the tooltip is what lets a sighted user reach it. Six controls whose meaning is
+genuinely a guess now carry one (`IconTooltip`), built from the same words as their
+`contentDescription` so the two cannot drift: the two "jump into the transcript"
+arrows, the overflow on the chat and on a session card, the attach disc, the refresh
+control, and the chevron that hides the conversation-info card. A back arrow or a
+send disc does not get one.
+
+Evidence: a plain tap on a wrapped control still opens its menu, so the wrapper is
+transparent to input (verified on the debug build: tapping the wrapped overflow
+opened "Branch from here / Conversation info / Server status / Settings"). The
+long-press trigger itself could not be reproduced from this harness — injected
+long presses do not reach Compose as one — so the tooltip's *appearance* is
+code-complete but not device-proven, and is recorded that way rather than claimed.
+
+## The conversation-info card
+
+The reveal was rebuilt as an actual card. The first version drew the metadata rows
+straight onto the transcript: no surface, no shape, no elevation. Two consequences,
+both reported by the owner and both real. Message text showed through the rows, so
+the two layers read as one broken thing; and the give's ripple, which is a
+displacement of a surface, had nothing solid to displace and smeared the text
+instead of moving the card.
+
+The card is now a `Surface` (28dp corners, surfaceContainerHigh, tonal and shadow
+elevation) that travels as one piece: at rest it sits entirely above the top edge of
+the transcript and the pull slides it down, with the transcript's box clipping it.
+It is the last child of that box rather than a sibling above the list, because a
+fixed-height card in the column would push the transcript down permanently. Its
+height is measured, and seeded with the nominal height so the first frame of a drag
+cannot flash it in place.
+
+Evidence: extracted emulator frames show the card descending out of the header, the
+rows at its edges dissolving rather than being cut, the give's ripple visibly
+displacing the card's own text ("medium" doubling mid-wave) and the transcript
+underneath staying crisp.
