@@ -69,6 +69,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +90,7 @@ import com.materialagent.core.model.OutgoingAttachment
 import com.materialagent.core.model.ProviderInfo
 import com.materialagent.data.ConnectionStatus
 import com.materialagent.data.HapticCue
+import com.materialagent.data.MotionLevel
 import com.materialagent.data.describeAttachment
 import com.materialagent.data.chat.EntryKind
 import com.materialagent.data.chat.TranscriptEntry
@@ -109,12 +111,15 @@ import com.materialagent.ui.rememberCue
 import com.materialagent.ui.theme.LocalSendOnEnter
 import com.materialagent.ui.theme.alphaSpec
 import com.materialagent.ui.theme.cornerRadiusSpec
+import com.materialagent.ui.components.liquidRipple
 import com.materialagent.ui.components.pullToReveal
 import com.materialagent.ui.components.PullRatchet
+import com.materialagent.ui.components.PullRipple
 import com.materialagent.ui.components.rememberPullRevealState
 import com.materialagent.ui.components.scrollHaptics
 import com.materialagent.ui.theme.placementSpec
 import com.materialagent.ui.theme.playfulSpec
+import com.materialagent.ui.theme.LocalMotionLevel
 import com.materialagent.ui.theme.LocalScrollHaptics
 import com.materialagent.ui.theme.LocalShowReasoning
 import com.materialagent.ui.theme.LocalShowToolCalls
@@ -154,6 +159,7 @@ fun ChatScreen(
     val showTools = LocalShowToolCalls.current
     val streamingHaptics = LocalStreamingHaptics.current
     val scrollHaptics = LocalScrollHaptics.current
+    val reducedMotion = LocalMotionLevel.current == MotionLevel.REDUCED
 
     /*
      * Media rows fetch their own bytes, so they need the signed-in server and
@@ -222,6 +228,7 @@ fun ChatScreen(
      */
     val reveal = rememberPullRevealState()
     val revealSpec = placementSpec<Float>()
+    var ripple by remember { mutableIntStateOf(0) }
 
     /*
      * The pull's own feedback, read off the pull itself rather than off the
@@ -229,11 +236,20 @@ fun ChatScreen(
      * giving, then a single REVEAL when the threshold is reached. Reading it as
      * state is what keeps a streaming answer's auto-scroll silent — that scroll
      * is a side effect, arrives as such, and never moves the pull at all.
+     *
+     * The ripple is set going by that same cue rather than by a second check of
+     * the threshold, so the wave and the bump in the hand are one event by
+     * construction; it also means the wave inherits the cue's schedule, which
+     * fires once per give and re-arms only at rest. The cue is read here, before
+     * the haptics engine resolves it, so turning haptics off silences the motor
+     * and not the screen.
      */
     LaunchedEffect(reveal) {
         val ratchet = PullRatchet()
         snapshotFlow { reveal.progress }.collect { progress ->
-            ratchet.onProgress(progress)?.let(cue)
+            val earned = ratchet.onProgress(progress) ?: return@collect
+            cue(earned)
+            if (PullRipple.firesOn(earned)) ripple++
         }
     }
     val entries = transcript.visibleEntries
@@ -361,7 +377,15 @@ fun ChatScreen(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
 
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    // The transcript is what the gesture pulled, so it is what the
+                    // give ripples: a liquid wave through the messages as the
+                    // panel settles over them. Decorative, so reduced motion
+                    // leaves the surface still and keeps the reveal itself.
+                    .liquidRipple(trigger = ripple, enabled = !reducedMotion),
+            ) {
                 when {
                     transcript.loadingHistory && entries.isEmpty() ->
                         LoadingBlock("Reopening the conversation…")
