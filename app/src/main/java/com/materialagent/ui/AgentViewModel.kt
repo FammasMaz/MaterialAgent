@@ -65,7 +65,7 @@ class AgentViewModel(private val container: AppContainer) : ViewModel() {
 
     val status: StateFlow<ConnectionStatus> = container.connection.status
     val skin = container.connection.skin
-    val serverVersion = container.connection.client.serverVersion
+    val serverVersion = container.connection.serverVersion
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()

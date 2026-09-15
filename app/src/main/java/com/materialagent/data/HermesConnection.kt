@@ -66,6 +66,18 @@ class HermesConnection(
 
     val skin: StateFlow<Skin?> get() = client.skin
 
+    /**
+     * The gateway's own version, read from `GET /api/health`.
+     *
+     * Hermes does not put a version in `gateway.ready`, so without this probe the
+     * settings card had nothing to show and printed a bare "agent null".
+     */
+    private val _serverVersion = MutableStateFlow<String?>(null)
+    val serverVersion: StateFlow<String?> = _serverVersion.asStateFlow()
+
+    /** Which server the version has already been asked for, so reconnects stay quiet. */
+    private var versionAskedFor: String? = null
+
     /** Flips true once the first `gateway.ready` lands; used to gate the UI. */
     private val _handshakeComplete = MutableStateFlow(false)
     val handshakeComplete: StateFlow<Boolean> = _handshakeComplete.asStateFlow()
@@ -83,13 +95,20 @@ class HermesConnection(
     private fun publish(attemptId: Int, status: ConnectionStatus) {
         if (attempts.allows(attemptId)) {
             _status.value = status
-        } else {
+            // The version is a label, so it is fetched in the background once per
+            // server instead of holding up the connect path on a second request.
+            if (status is ConnectionStatus.Connected) askServerVersion(status.profile)
         }
     }
 
     suspend fun activate(profile: ServerProfile): ConnectionStatus {
         intentionalStop = false
         stopWatcher()
+        if (activeProfile?.baseUrl != profile.baseUrl) {
+            // A different server means a different version, so the old label goes.
+            _serverVersion.value = null
+            versionAskedFor = null
+        }
         activeProfile = profile
         // Claimed before dialling, so this connect supersedes anything already in
         // flight and cannot be undone afterwards by the redial it replaced.
@@ -115,6 +134,8 @@ class HermesConnection(
         intentionalStop = true
         stopWatcher()
         activeProfile = null
+        _serverVersion.value = null
+        versionAskedFor = null
         _handshakeComplete.value = false
         client.disconnect("user disconnected")
         publish(attempts.claim(), ConnectionStatus.Idle)
@@ -392,6 +413,44 @@ class HermesConnection(
             .firstOrNull { it.str("supports_password")?.equals("true", ignoreCase = true) == true }
             ?.str("name")
     }
+
+    /** Asks the active server for its version, once, without blocking the connect path. */
+    private fun askServerVersion(profile: ServerProfile) {
+        if (versionAskedFor == profile.baseUrl) return
+        versionAskedFor = profile.baseUrl
+        scope.launch {
+            val version = fetchServerVersion(profile) ?: return@launch
+            // Ignore a late answer if the user has moved to another server since.
+            if (activeProfile?.baseUrl == profile.baseUrl) _serverVersion.value = version
+        }
+    }
+
+    /**
+     * Best-effort read of `GET /api/health`, which Hermes answers without a session.
+     *
+     * A failure here is cosmetic — the version is only ever shown as a label — so it
+     * never reaches [status] or the retry ladder.
+     */
+    internal suspend fun fetchServerVersion(profile: ServerProfile): String? =
+        withContext(Dispatchers.IO) {
+            val url = HermesUrl.endpoint(profile.baseUrl, "/api/health")
+                ?: return@withContext null
+            runCatching {
+                http.newCall(Request.Builder().url(url).get().build()).execute().use { response ->
+                    if (response.isSuccessful) {
+                        healthVersion(response.body?.string().orEmpty())
+                    } else {
+                        null
+                    }
+                }
+            }.getOrNull()
+        }
+
+    /** Reads `version` out of a health payload, tolerating anything else. */
+    internal fun healthVersion(body: String): String? =
+        runCatching { HermesJson.parseToJsonElement(body).objOrNull()?.str("version") }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
 
     /**
      * Turns a dial failure into something the UI can say truthfully.
