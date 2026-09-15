@@ -142,12 +142,20 @@ fun SectionHeader(
     }
 }
 
-/** A compact status pill: label plus optional leading icon. */
+/**
+ * A compact status pill: label plus an optional leading mark.
+ *
+ * [icon] is the ordinary case — a rounded vector that says what state the pill
+ * reports. [leading] exists for the marks that are not vectors at all: the chat
+ * header's "Working" pill draws the M3E shape glyph, and a slot is what lets it do
+ * that without a second pill composable.
+ */
 @Composable
 fun MetaPill(
     text: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    leading: (@Composable () -> Unit)? = null,
     container: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     content: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
@@ -161,7 +169,10 @@ fun MetaPill(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (icon != null) {
+            if (leading != null) {
+                leading()
+                Spacer(Modifier.width(5.dp))
+            } else if (icon != null) {
                 Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(5.dp))
             }

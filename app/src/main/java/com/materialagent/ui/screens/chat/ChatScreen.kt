@@ -40,7 +40,6 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Info
@@ -94,7 +93,7 @@ import com.materialagent.data.describeAttachment
 import com.materialagent.data.chat.EntryKind
 import com.materialagent.data.chat.TranscriptEntry
 import com.materialagent.ui.AgentViewModel
-import com.materialagent.ui.components.AgentArt
+import com.materialagent.ui.components.AgentShapeGlyph
 import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
 import com.materialagent.ui.components.LoadingBlock
@@ -626,7 +625,7 @@ private fun ChatTopBar(
                             text = elapsed?.let { "Working ${formatDuration(it)}" } ?: "Working",
                             container = MaterialTheme.colorScheme.secondaryContainer,
                             content = MaterialTheme.colorScheme.onSecondaryContainer,
-                            icon = Icons.Rounded.AutoAwesome,
+                            leading = { AgentShapeGlyph(size = 14.dp) },
                         )
                     }
                     /*
@@ -714,7 +713,7 @@ private fun WorkingIndicator(elapsed: Double?) {
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AgentArt(size = 28.dp, active = true)
+        AgentShapeGlyph(size = 28.dp, active = true)
         Spacer(Modifier.width(12.dp))
         Column {
             Text(
