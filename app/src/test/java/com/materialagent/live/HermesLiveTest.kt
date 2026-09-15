@@ -119,6 +119,154 @@ class HermesLiveTest {
     }
 
     /**
+     * Does a live turn report tool activity, or only a replayed transcript?
+     *
+     * The README gallery capture showed `terminal` rows when a conversation was
+     * reopened and none while the same kind of turn was still streaming. That is
+     * either gateway behaviour — tool events exist only in history — or an app-side
+     * gap. Asking the gateway directly is the only way to tell them apart, so this
+     * runs a prompt that cannot be answered without running a command, records the
+     * live event vocabulary, then replays the same session and prints both.
+     *
+     * The assertions are about the turn finishing, not about the model choosing a
+     * tool, because that choice is the model's. The evidence is the verdict lines.
+     */
+    @Test(timeout = 480_000)
+    fun liveTurnReportsToolActivityTheSameWayHistoryDoes() {
+        val wsUrl = configuredGateway()
+        assumeTrue(
+            "Skipping: nothing listening at $wsUrl — run scripts/tunnel.sh first.",
+            gatewayReachable(wsUrl),
+        )
+
+        val http = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(http, scope)
+        val transcript = StringBuilder()
+        fun note(line: String) {
+            transcript.appendLine(line)
+        }
+
+        var runtimeSessionId: String? = null
+        var storedSessionId: String? = null
+
+        try {
+            runBlocking {
+                val events = CopyOnWriteArrayList<GatewayEvent>()
+                val collectorScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+                collectorScope.launch { client.events.collect { events.add(it) } }
+
+                client.connect(wsUrl, openingTimeoutMs = 30_000)
+                waitUntil(HANDSHAKE_TIMEOUT_MS) { client.skin.value != null }
+
+                val created = client.request(
+                    "session.create",
+                    buildJsonObject {
+                        put("source", JsonPrimitive("mobile"))
+                        put("title", JsonPrimitive("MaterialAgent tool-event probe"))
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                runtimeSessionId = created.str("session_id").orEmpty()
+                storedSessionId = created.str("stored_session_id")
+                val liveId = runtimeSessionId
+
+                val marker = "MATERIALAGENT_TOOL_EVENT_OK"
+                val command = "rm -rf /tmp/materialagent-toolevent-probe && echo $marker"
+                val turnStartedAt = System.currentTimeMillis()
+                client.request(
+                    "prompt.submit",
+                    buildJsonObject {
+                        put("session_id", JsonPrimitive(liveId))
+                        put(
+                            "text",
+                            JsonPrimitive(
+                                "Use the terminal tool to run exactly this one command: " +
+                                    "$command\\nThen reply with the command's raw output.",
+                            ),
+                        )
+                    },
+                    timeoutMs = REQUEST_TIMEOUT_MS,
+                )
+                note("submitted   $command")
+
+                // Approve it the way the app does. Without an answer the ~60 s
+                // fail-closed window denies the command and no tool ever runs, which
+                // would make the whole probe report "no tool events" for the wrong
+                // reason. The danger gate is also what makes the agent actually reach
+                // for the terminal: a plain `echo` prompt it answers from memory.
+                waitUntil(APPROVAL_WAIT_MS) {
+                    events.any { it.type == GatewayEvent.APPROVAL_REQUEST && it.sessionId == liveId }
+                }
+                val approval = events.firstOrNull {
+                    it.type == GatewayEvent.APPROVAL_REQUEST && it.sessionId == liveId
+                }
+                note("approval    ${approval != null}")
+                assertNotNull(
+                    "a Tier-2 command has to raise an approval, or the probe never runs a tool at all; " +
+                        "types seen: " + events.filter { it.sessionId == liveId }.map { it.type }.distinct(),
+                    approval,
+                )
+                approval?.requestId?.let { requestId ->
+                    val responded = client.request(
+                        "approval.respond",
+                        InteractionParams.approval(liveId, requestId, "once"),
+                        timeoutMs = REQUEST_TIMEOUT_MS,
+                    )
+                    note("approved    ${responded.toString().take(140)}")
+                }
+
+                val complete = awaitMessageComplete(events, liveId, turnStartedAt, ::note)
+                val answered = complete.text.orEmpty()
+                note("marker echoed back: ${answered.contains(marker)}")
+
+                val mine = events.filter { it.sessionId == liveId }
+                val liveToolEvents = mine.filter {
+                    it.type == GatewayEvent.TOOL_START ||
+                        it.type == GatewayEvent.TOOL_COMPLETE ||
+                        it.type == GatewayEvent.TOOL_GENERATING
+                }
+                note("live event types, in order: ${mine.map { it.type }}")
+                note("live tool events: ${liveToolEvents.size}")
+                liveToolEvents.forEach { event ->
+                    note("  · ${event.type} ${event.payload.toString().take(240)}")
+                }
+
+                val history = runCatching {
+                    client.request("session.history", idParams(liveId), timeoutMs = REQUEST_TIMEOUT_MS)
+                }
+                val historyText = history.getOrNull()?.toString().orEmpty()
+                note("history bytes: ${historyText.length}, mentions of \"tool\": ${Regex("tool").findAll(historyText).count()}")
+                note("history head: ${historyText.take(600)}")
+
+                assertTrue(
+                    "the probe turn has to finish before its vocabulary means anything",
+                    mine.any { it.type == GatewayEvent.MESSAGE_COMPLETE },
+                )
+                assertEquals(
+                    "sessions created by this probe are thrown away in the finally block",
+                    1,
+                    listOfNotNull(runtimeSessionId).size,
+                )
+            }
+        } finally {
+            runBlocking { cleanup(client, runtimeSessionId, storedSessionId, ::note) }
+            client.disconnect("live test finished")
+            scope.cancel()
+            println("──────── hermes tool-event probe ────────")
+            print(transcript)
+            println("────────────────────────────────────────")
+        }
+    }
+
+    /**
      * The attachment contract: bytes up, references back, files delivered.
      *
      * Three things had to be true before the app could let a user send anything,

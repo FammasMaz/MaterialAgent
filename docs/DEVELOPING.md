@@ -183,6 +183,7 @@ All verified against a live server; `docs/PROTOCOL.md` has the full list.
 | Sequence numbers are per-session and valid only inside the active `replay_epoch` | stale watermarks must be discarded when the epoch changes |
 | A resumed session replays `pending_approval` | an approval raised while the socket was down still arrives |
 | `gateway.ready` carries no version field | the gateway's version comes from `GET /api/health` instead, which answers without a session |
+| `tool.*` events exist only in `session.history` | a live turn streams `thinking.delta`/`message.delta` and nothing about the command it is running; the `terminal` rows appear when the conversation is replayed |
 | `session.list` can lag a branch-snapshot flush | a just-created branch may not be visible yet |
 
 ## Verified, and what is not
@@ -191,7 +192,13 @@ All verified against a live server; `docs/PROTOCOL.md` has the full list.
   tunnel: a granted approval is proven to have run its command, and a clarify batch's answers came
   back from the agent.
 - Reconnect recovery is proven by cutting the network for a minute and watching the foreground
-  liveness probe redial, with the next turn landing in `session.history`.
+  liveness probe redial, with the next turn landing in `session.history`. The retry watcher was also
+  watched on a device: killing the gateway mid-session showed `Reconnecting (attempt 4)…`, and
+  restarting it reconnected on its own, with no manual Retry.
+- `liveTurnReportsToolActivityTheSameWayHistoryDoes` runs a command that genuinely executes (its
+  marker comes back in the reply) and records the live vocabulary: `approval.request` arrives live,
+  `tool.start`/`tool.complete` do not. They are replay-only, so a transcript that grows tool rows
+  only after a reopen is behaving correctly.
 - **Haptics are verified at the platform, not at the hand.** `adb shell dumpsys vibrator_manager`
   keeps an aggregated history of the effects an app actually played, and the debug package's
   entries match the cue table primitive for primitive — but how they feel needs a motor.
