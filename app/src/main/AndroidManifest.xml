@@ -7,6 +7,19 @@
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!--
+      Background notifications. The Hermes gateway has no push infrastructure
+      (no FCM/APNs server side), so genuine remote push is impossible; the
+      mechanism is a foreground service keeping the WebSocket alive while the
+      app is backgrounded, plus local notifications raised from live events.
+      POST_NOTIFICATIONS is the runtime permission on API 33+; the two
+      FOREGROUND_SERVICE permissions are required to start a dataSync-type
+      foreground service from API 34.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!--
       Required before the updater may hand a downloaded APK to the platform
       installer. Without it `canRequestPackageInstalls()` does not return false —
       it throws SecurityException, which took the whole app down the moment the
@@ -47,6 +60,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Keeps the Hermes socket alive while backgrounded and raises the
+             local notifications the (push-less) gateway cannot send. dataSync
+             is the closest declared type: the work is keeping a data channel
+             open, not media playback or location. -->
+        <service
+            android:name=".notify.NotifyForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Sole reason this app declares a provider: a downloaded update APK
              lives in the app's own cache, and the platform installer cannot read

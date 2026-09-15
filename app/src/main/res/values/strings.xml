@@ -14,4 +14,16 @@
     <string name="cd_new_session">New session</string>
     <string name="cd_menu">Menu</string>
     <string name="cd_back">Back</string>
+
+    <!-- Notification channels and the foreground service card -->
+    <string name="channel_turns_name">Agent replies</string>
+    <string name="channel_turns_desc">The agent finished a turn while you were away</string>
+    <string name="channel_attention_name">Agent needs you</string>
+    <string name="channel_attention_desc">An approval or question is waiting and expires quickly</string>
+    <string name="channel_connection_name">Connection</string>
+    <string name="channel_connection_desc">The connection to your agent dropped or came back</string>
+    <string name="channel_service_name">Background connection</string>
+    <string name="channel_service_desc">Shown while the app keeps the connection alive in the background</string>
+    <string name="service_notification_title">Connected to Hermes</string>
+    <string name="service_notification_text">Keeping the connection alive so you hear about replies</string>
 </resources>
