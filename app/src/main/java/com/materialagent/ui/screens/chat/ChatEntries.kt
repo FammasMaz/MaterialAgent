@@ -766,7 +766,7 @@ fun InteractionCard(
                         keyboardActions = KeyboardActions(
                             onDone = {
                                 if (typed.isNotBlank()) {
-                                    onCue(HapticCue.NEEDS_ATTENTION)
+                                    onCue(HapticCue.SENT)
                                     onAnswer(typed)
                                 }
                             },
@@ -777,7 +777,7 @@ fun InteractionCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
-                                onCue(HapticCue.NEEDS_ATTENTION)
+                                onCue(HapticCue.SENT)
                                 onAnswer(typed)
                             },
                             enabled = typed.isNotBlank(),

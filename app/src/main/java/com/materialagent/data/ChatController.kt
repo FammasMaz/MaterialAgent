@@ -58,6 +58,12 @@ enum class HapticCue {
     /** A pull-to-refresh gesture passed its threshold. */
     REFRESH,
 
+    /** A server answered and its session is live. Not a turn completing. */
+    CONNECTED,
+
+    /** A server could not be reached. Not a turn failing. */
+    CONNECT_FAILED,
+
     /** One ratchet step of the transcript's pull past its top edge, on the way to giving. */
     REVEAL_TICK,
 

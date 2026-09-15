@@ -135,13 +135,13 @@ fun ConnectScreen(
         when (val current = status) {
             is ConnectionStatus.Connected -> {
                 connecting = false
-                cue(HapticCue.TURN_COMPLETE)
+                cue(HapticCue.CONNECTED)
                 onDone()
             }
 
             is ConnectionStatus.Failed -> {
                 connecting = false
-                cue(HapticCue.TURN_FAILED)
+                cue(HapticCue.CONNECT_FAILED)
             }
 
             else -> Unit

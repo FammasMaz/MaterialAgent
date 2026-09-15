@@ -138,7 +138,7 @@ fun CapabilitiesScreen(
                     }
                     IconButton(
                         onClick = {
-                            cue(HapticCue.SENT)
+                            cue(HapticCue.REFRESH)
                             viewModel.refresh()
                         },
                         shapes = IconButtonDefaults.shapes(),
@@ -152,7 +152,7 @@ fun CapabilitiesScreen(
                     options = CapabilityTab.entries.map { it.label },
                     selectedIndex = CapabilityTab.entries.indexOf(tab),
                     onSelect = { index ->
-                        cue(HapticCue.SENT)
+                        cue(HapticCue.TOGGLE)
                         tab = CapabilityTab.entries[index]
                     },
                     fillWidth = true,
@@ -230,7 +230,7 @@ fun CapabilitiesScreen(
                         ToolsetCard(
                             toolset = toolset,
                             onChange = { enabled ->
-                                cue(HapticCue.TOOL_DONE)
+                                cue(HapticCue.TOGGLE)
                                 viewModel.setToolsetEnabled(toolset.name, enabled)
                             },
                         )

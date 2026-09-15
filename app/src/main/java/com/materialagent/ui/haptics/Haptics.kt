@@ -56,8 +56,28 @@ class Haptics(context: Context) {
     private fun build(cue: HapticCue, level: HapticLevel): VibrationEffect {
         val s = level.strength()
         return when (cue) {
-            // A single clean tick: "heard you".
-            HapticCue.SENT, HapticCue.TOOL_DONE, HapticCue.INTERRUPTED -> effect(s, listOf(0L))
+            // A single clean tick: "heard you", or "that tool finished".
+            HapticCue.SENT, HapticCue.TOOL_DONE -> effect(s, listOf(0L))
+
+            // A stop, not a receipt. SENT is the most-used cue in the app — every
+            // submit, every navigation tap, every segment — so the one cue it must
+            // never be confused with is the deliberate stop. Both were the same
+            // single tick at the same amplitude. This sits lower and falls away
+            // immediately after itself, so it reads as something being cut off.
+            HapticCue.INTERRUPTED ->
+                effect(s * 0.8f, listOf(0L, 30L), amplitudes = listOf(1f, 0.35f), low = true)
+
+            // Reaching a server is not a turn finishing, and failing to reach one
+            // is not a turn failing — but those four shared two cues, so "your
+            // answer finished in the conversation you are not looking at" and "the
+            // server is unreachable" were the same buzz. The connection pair is
+            // deliberately blunter than the turn pair: a rising tap, and a thudding
+            // fall.
+            HapticCue.CONNECTED ->
+                effect(s * 0.6f, listOf(0L, 45L), amplitudes = listOf(0.5f, 1f))
+
+            HapticCue.CONNECT_FAILED ->
+                effect(s, listOf(0L, 70L, 70L), amplitudes = listOf(1f, 0.8f, 0.6f))
 
             // Very light: the agent is alive and producing tokens.
             HapticCue.STREAM_TICK -> effect(s * 0.45f, listOf(0L))

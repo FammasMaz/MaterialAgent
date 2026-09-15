@@ -138,7 +138,7 @@ fun SettingsScreen(
                         options = ThemeMode.entries.map { it.label() },
                         selectedIndex = ThemeMode.entries.indexOf(settings.themeMode),
                         onSelect = { index ->
-                            cue(HapticCue.SENT)
+                            cue(HapticCue.TOGGLE)
                             app.update { it.copy(themeMode = ThemeMode.entries[index]) }
                         },
                         fillWidth = true,
@@ -173,7 +173,7 @@ fun SettingsScreen(
                             .indexOf(activePalette)
                             .coerceAtLeast(0),
                         onSelect = { index ->
-                            cue(HapticCue.SENT)
+                            cue(HapticCue.TOGGLE)
                             app.update { it.copy(palette = paletteChoices[index]) }
                         },
                         fillWidth = true,
@@ -191,7 +191,7 @@ fun SettingsScreen(
                         options = MotionLevel.entries.map { it.label() },
                         selectedIndex = MotionLevel.entries.indexOf(settings.motionLevel),
                         onSelect = { index ->
-                            cue(HapticCue.SENT)
+                            cue(HapticCue.TOGGLE)
                             app.update { it.copy(motionLevel = MotionLevel.entries[index]) }
                         },
                         fillWidth = true,
