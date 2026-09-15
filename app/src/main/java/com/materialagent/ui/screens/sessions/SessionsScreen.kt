@@ -66,6 +66,7 @@ import com.materialagent.ui.containerViewModel
 import com.materialagent.ui.components.AgentShapeGlyph
 import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
+import com.materialagent.ui.components.IconTooltip
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.LivePulse
 import com.materialagent.ui.components.MetaPill
@@ -408,8 +409,10 @@ private fun HeaderRow(
                 // alternative, and the pull was the only way to refresh this list.
                 // This is the same control the capabilities header already carries
                 // for the same reason, firing the same cue.
-                IconButton(onClick = onRefresh, shapes = IconButtonDefaults.shapes()) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "Refresh conversations")
+                IconTooltip("Refresh conversations") {
+                    IconButton(onClick = onRefresh, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "Refresh conversations")
+                    }
                 }
             }
         }
@@ -545,8 +548,10 @@ private fun SessionCard(
             }
 
             Box {
-                IconButton(onClick = { menuOpen = true }, shapes = IconButtonDefaults.shapes()) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "Conversation actions")
+                IconTooltip("Conversation actions") {
+                    IconButton(onClick = { menuOpen = true }, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "Conversation actions")
+                    }
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(

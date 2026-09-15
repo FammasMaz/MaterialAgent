@@ -32,6 +32,7 @@ import com.materialagent.core.model.SessionSummary
 import com.materialagent.data.HapticCue
 import com.materialagent.data.chat.ChatTranscript
 import com.materialagent.ui.components.BlurEdge
+import com.materialagent.ui.components.IconTooltip
 import com.materialagent.ui.components.PullRevealState
 import com.materialagent.ui.components.liquidRipple
 import com.materialagent.ui.components.progressiveBlur
@@ -131,14 +132,16 @@ internal fun PullRevealPanel(
             ) {
                 // The only control the reveal needs: the pull opened it, and this
                 // is how it goes back. It stays put while the rows scroll under it.
-                IconButton(
-                    onClick = onCollapse,
-                    shapes = IconButtonDefaults.shapes(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.KeyboardArrowUp,
-                        contentDescription = "Hide conversation info",
-                    )
+                IconTooltip("Hide conversation info") {
+                    IconButton(
+                        onClick = onCollapse,
+                        shapes = IconButtonDefaults.shapes(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.KeyboardArrowUp,
+                            contentDescription = "Hide conversation info",
+                        )
+                    }
                 }
             }
 

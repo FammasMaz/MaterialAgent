@@ -99,6 +99,7 @@ import com.materialagent.ui.AgentViewModel
 import com.materialagent.ui.components.AgentShapeGlyph
 import com.materialagent.ui.components.EmptyState
 import com.materialagent.ui.components.ErrorBanner
+import com.materialagent.ui.components.IconTooltip
 import com.materialagent.ui.components.LoadingBlock
 import com.materialagent.ui.components.MetaPill
 import com.materialagent.ui.components.media.LocalMediaEnvironment
@@ -459,17 +460,19 @@ fun ChatScreen(
                 }
 
                 if (!atBottom && entries.isNotEmpty()) {
-                    FilledTonalIconButton(
-                        onClick = {
-                            cue(HapticCue.SENT)
-                            scope.launch { listState.animateScrollToItem(entries.size - 1) }
-                        },
-                        shapes = IconButtonDefaults.shapes(),
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(16.dp),
-                    ) {
-                        Icon(Icons.Rounded.ArrowDownward, contentDescription = "Jump to latest")
+                    IconTooltip("Jump to latest") {
+                        FilledTonalIconButton(
+                            onClick = {
+                                cue(HapticCue.SENT)
+                                scope.launch { listState.animateScrollToItem(entries.size - 1) }
+                            },
+                            shapes = IconButtonDefaults.shapes(),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp),
+                        ) {
+                            Icon(Icons.Rounded.ArrowDownward, contentDescription = "Jump to latest")
+                        }
                     }
                 }
 
@@ -690,8 +693,10 @@ private fun ChatTopBar(
             }
 
             Box {
-                IconButton(onClick = { onMenuOpenChange(true) }, shapes = IconButtonDefaults.shapes()) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "More actions")
+                IconTooltip("More actions") {
+                    IconButton(onClick = { onMenuOpenChange(true) }, shapes = IconButtonDefaults.shapes()) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "More actions")
+                    }
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenuOpenChange(false) }) {
                     if (running) {
@@ -959,13 +964,15 @@ private fun AttachButton(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(
-            onClick = { open = true },
-            enabled = enabled,
-            shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.size(48.dp),
-        ) {
-            Icon(Icons.Rounded.Add, contentDescription = "Attach a photo, sound or file")
+        IconTooltip("Attach a photo, sound or file") {
+            IconButton(
+                onClick = { open = true },
+                enabled = enabled,
+                shapes = IconButtonDefaults.shapes(),
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(Icons.Rounded.Add, contentDescription = "Attach a photo, sound or file")
+            }
         }
 
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
