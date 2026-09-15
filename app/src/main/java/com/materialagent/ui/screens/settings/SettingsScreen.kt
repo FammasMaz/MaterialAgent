@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -57,6 +58,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -678,6 +682,19 @@ private fun SwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // The row is the item, not the switch. M3's list accessibility model
+            // puts the role and the checked state on the list item as a whole and
+            // takes the item's label and supporting text as its accessibility
+            // label; leaving all of that on the Switch instead announced a bare
+            // "on, switch" beside two lines of text the screen reader read out
+            // separately, with nothing tying them together. The ripple and the
+            // state layer move to the row with it, which is also the bigger and
+            // therefore correct target for a 44dp control in a 68dp row.
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -691,7 +708,9 @@ private fun SwitchRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        // Non-interactive: the row above owns the toggle, so the switch draws the
+        // state and contributes no second, unlabelled target of its own.
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -759,6 +778,16 @@ private fun UpdateCard(
                     checked = autoCheck,
                     onCheckedChange = onAutoCheckChange,
                     enabled = BuildConfig.EXTERNAL_UPDATES_ENABLED,
+                    // This switch has no row of its own to take the label from the
+                    // way `SwitchRow` does — the row under it is the update
+                    // controls, not its name — so it carries the label itself.
+                    // M3's switch guidance is explicit that a switch's
+                    // accessibility label comes from adjacent text, and that it
+                    // should be made more descriptive when the visible text is
+                    // ambiguous (here: "Updates").
+                    modifier = Modifier.semantics {
+                        contentDescription = "Check for updates automatically"
+                    },
                 )
             },
         ) {
