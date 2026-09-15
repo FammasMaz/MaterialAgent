@@ -56,11 +56,17 @@ val BodyFamily = FontFamily(
 /**
  * Expressive voice: screen titles and hero numerics. Narrower, tighter
  * counters, heavier — the M3E "poster" register.
+ *
+ * 900 is declared because [heavier] adds one step of weight to every baseline
+ * style, and `displayLarge`, `displayMedium`, `displaySmall` and `headlineLarge`
+ * are already at 800: without a 900 face those four emphasized styles could not
+ * resolve to the heavier voice they ask for and would land back on 800.
  */
 val DisplayFamily = FontFamily(
     variable(600, expressive = true),
     variable(700, expressive = true),
     variable(800, expressive = true),
+    variable(900, expressive = true),
 )
 
 private val NoFontPadding = PlatformTextStyle(includeFontPadding = false)
