@@ -61,13 +61,6 @@ class HermesConnection(
 
     val client = HermesClient(http, scope, now)
 
-    init {
-        // TEMPORARY diagnosis: mirror the transport's own decisions into logcat.
-        client.trace = { line -> android.util.Log.i("MAConn", line) }
-    }
-
-    private fun note(line: String) = android.util.Log.i("MAConn", line)
-
     private val _status = MutableStateFlow<ConnectionStatus>(ConnectionStatus.Idle)
     val status: StateFlow<ConnectionStatus> = _status.asStateFlow()
 
@@ -89,10 +82,8 @@ class HermesConnection(
     /** Publishes [status] only while [attemptId] is still the newest attempt. */
     private fun publish(attemptId: Int, status: ConnectionStatus) {
         if (attempts.allows(attemptId)) {
-            note("publish #$attemptId ${status::class.java.simpleName}")
             _status.value = status
         } else {
-            note("publish #$attemptId DROPPED ${status::class.java.simpleName}")
         }
     }
 
@@ -172,7 +163,6 @@ class HermesConnection(
         // Reconnecting does *not* count: that status is also what the watcher
         // publishes while it sits in its backoff, and making the user wait out a
         // 30 s timer behind a banner is the same bug from the outside.
-        note("onForeground activeProfile=true status=${_status.value::class.java.simpleName}")
         if (_status.value is ConnectionStatus.Connecting) return
         scope.launch {
             // Not "does the state read OPEN": ask the gateway. A socket that died
@@ -235,7 +225,6 @@ class HermesConnection(
                 // "Connection lost" until the user tapped Retry by hand. The
                 // backoff ladder below only ever ran once because of it.
                 if (client.isAuthRejected) {
-                    note("watcher: credentials rejected -> Failed, stopping")
                     publish(
                         attemptId,
                         ConnectionStatus.Failed(
@@ -247,13 +236,11 @@ class HermesConnection(
                     return@launch
                 }
                 attempt += 1
-                note("watcher: reconnecting, attempt $attempt")
                 publish(attemptId, ConnectionStatus.Reconnecting(profile, attempt))
                 delay(backoffFor(attempt))
                 if (intentionalStop || activeProfile?.id != profile.id) return@launch
                 val error = runCatching { dial(profile) }.exceptionOrNull()
                 if (error == null) {
-                    note("watcher: redial ok")
                     attempt = 0
                     publish(attemptId, ConnectionStatus.Connected(profile))
                     continue
@@ -261,7 +248,6 @@ class HermesConnection(
                 // A redial can fail for a reason retrying cannot fix either: the
                 // password was changed on the server, or sign-in is being
                 // rate-limited. classify() already knows which failures those are.
-                note("watcher: redial failed: ${error::class.java.simpleName}")
                 val failure = classify(profile, error)
                 if (failure is ConnectionStatus.Failed && failure.needsCredentials) {
                     publish(attemptId, failure)

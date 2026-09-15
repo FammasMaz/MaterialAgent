@@ -75,10 +75,6 @@ class HermesClient(
     private val requestIds = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableDeferred<JsonObject>>()
 
-    /** TEMPORARY diagnosis hook: set by HermesConnection to mirror decisions into logcat. */
-    @Volatile var trace: ((String) -> Unit)? = null
-    private fun note(line: String) { trace?.invoke(line) }
-
     @Volatile private var socket: WebSocket? = null
     @Volatile private var lastInboundAt: Long = 0
     @Volatile private var inboundFrames: Long = 0
@@ -131,13 +127,11 @@ class HermesClient(
         val ready = withTimeoutOrNull(openingTimeoutMs) { opened.await() }
         if (ready == null) {
             // Either the socket never opened or the server never said hello.
-            note("connect TIMEOUT urlsuffix=${wsUrl.takeLast(12)}")
             ws.cancel()
             socket = null
             _state.value = ConnectionState.ERROR
             throw HermesTransportException("Timed out waiting for the gateway handshake")
         }
-        note("connect OPEN urlsuffix=${wsUrl.takeLast(12)}")
         _state.value = ConnectionState.OPEN
         startHeartbeat()
         maybeReplay()
@@ -155,7 +149,6 @@ class HermesClient(
 
     /** Marks the current socket stale without tearing down the URL, so a caller can redial. */
     private fun invalidate(reason: String) {
-        note("invalidate: $reason (inboundFrames=$inboundFrames)")
         socket?.cancel()
         socket = null
         heartbeatJob?.cancel()
@@ -380,7 +373,6 @@ class HermesClient(
      * socket that has actually been checked.
      */
     suspend fun checkLivenessOnForeground(): Boolean {
-        note("checkLiveness socket=${if (socket == null) "null" else "live"} silence=${(now() - lastInboundAt) / 1000}s state=${_state.value}")
         if (socket == null) return false
         val silentFor = now() - lastInboundAt
         if (silentFor >= HEARTBEAT_DEADLINE_MS) {
@@ -424,7 +416,6 @@ class HermesClient(
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             if (socket !== webSocket) return
-            note("onFailure ${t::class.java.simpleName}: ${t.message} (inbound=$inboundFrames)")
             if (!opened.isCompleted) opened.completeExceptionally(t)
             socket = null
             heartbeatJob?.cancel()
@@ -438,7 +429,6 @@ class HermesClient(
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
             if (socket !== webSocket) return
-            note("onClosed code=$code reason=$reason (inbound=$inboundFrames)")
             socket = null
             heartbeatJob?.cancel()
             if (!opened.isCompleted) {
