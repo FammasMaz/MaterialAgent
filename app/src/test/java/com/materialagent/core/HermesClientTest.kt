@@ -173,6 +173,76 @@ class HermesClientTest {
         }
     }
 
+    // ── Foreground liveness probe ──────────────────────────────────────────
+
+    /**
+     * A backgrounded Android process is frozen: no heartbeat fires, yet the
+     * gateway has long since dropped the socket. `checkLivenessOnForeground`
+     * exists so the app asks the gateway instead of trusting in-memory state.
+     *
+     * This test builds exactly that corpse: a socket the client still believes
+     * is open, but whose server side is gone. A live socket answers the probe;
+     * this one cannot, so the client must tear it down rather than hand the
+     * user a message that will hang.
+     */
+    @Test
+    fun foregroundProbeOnASocketTheServerAbandonedIsRejectedAndTheSocketInvalidated() = runBlocking {
+        // The handler stays silent: the server half of this socket is dead.
+        val ws = servedWebSocket()
+        val server = MockWebServer()
+        server.enqueue(MockResponse().withWebSocketUpgrade(ws))
+        server.start()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(OkHttpClient(), scope)
+        try {
+            client.connect(wsUrl(server))
+            assertTrue(client.isOpen)
+
+            val alive = client.checkLivenessOnForeground()
+
+            assertFalse("a dead socket must not be reported alive", alive)
+            assertFalse("the dead socket must be invalidated", client.isOpen)
+        } finally {
+            closeAll(ws, client, scope, server)
+        }
+    }
+
+    /** The happy path: a socket the gateway still answers must survive the probe. */
+    @Test
+    fun foregroundProbeOnALiveSocketKeepsTheConnectionOpen() = runBlocking {
+        val ws = servedWebSocket(
+            onMessage = { socket, text ->
+                val id = Json.parseToJsonElement(text).objOrNull()!!.str("id")!!
+                socket.send("""{"jsonrpc":"2.0","id":"$id","result":{}}""")
+            },
+        )
+        val server = MockWebServer()
+        server.enqueue(MockResponse().withWebSocketUpgrade(ws))
+        server.start()
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(OkHttpClient(), scope)
+        try {
+            client.connect(wsUrl(server))
+
+            assertTrue(client.checkLivenessOnForeground())
+            assertTrue(client.isOpen)
+        } finally {
+            closeAll(ws, client, scope, server)
+        }
+    }
+
+    /** With no socket at all there is nothing to probe — and nothing to trust. */
+    @Test
+    fun foregroundProbeWithoutASocketReportsDead() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        val client = HermesClient(OkHttpClient(), scope)
+        try {
+            assertFalse(client.checkLivenessOnForeground())
+        } finally {
+            scope.cancel()
+        }
+    }
+
     private fun wsUrl(server: MockWebServer): String =
         server.url("/api/ws").toString().replaceFirst("http:", "ws:")
 
