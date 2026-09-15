@@ -8,6 +8,7 @@
       splash and the launcher icon looking like the same brand.
     -->
     <color name="splash_icon_background">#4A2484</color>
+    <color name="ic_launcher_background">#EADDFF</color>
     <color name="brand_gold">#F5C24B</color>
     <color name="brand_indigo">#4F5488</color>
 </resources>
