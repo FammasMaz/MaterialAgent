@@ -63,7 +63,7 @@ private val AGENT_GLYPH_SHAPES: List<RoundedPolygon> = listOf(
     MaterialShapes.SoftBurst,
     MaterialShapes.Clover4Leaf,
     MaterialShapes.Cookie9Sided,
-)
+).map { it.normalized() }
 
 /** How long the mark holds each shape before morphing into the next. */
 private const val AGENT_GLYPH_HOLD_MILLIS = 300L
@@ -104,8 +104,8 @@ fun AgentShapeGlyph(
     val sequence = remember {
         AGENT_GLYPH_SHAPES.indices.map { i ->
             Morph(
-                AGENT_GLYPH_SHAPES[i].normalized(),
-                AGENT_GLYPH_SHAPES[(i + 1) % AGENT_GLYPH_SHAPES.size].normalized(),
+                AGENT_GLYPH_SHAPES[i],
+                AGENT_GLYPH_SHAPES[(i + 1) % AGENT_GLYPH_SHAPES.size],
             )
         }
     }
