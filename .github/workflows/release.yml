@@ -173,8 +173,8 @@ jobs:
 
       - name: Commit the version bump
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name  "FammasMaz"
+          git config user.email "fammasmaz@users.noreply.github.com"
           git add app/build.gradle.kts
           git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
           git push
