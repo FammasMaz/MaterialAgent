@@ -335,13 +335,12 @@ states, with deltas decaying (0.25 → 0.04) as the spring settles, and 0.00 out
 - **Haptics are verified at the platform, not at the hand.** The emulator exposes a vibrating
   device supporting `COMPOSE_EFFECTS` and the `TICK`/`LOW_TICK` primitives, so the recorded
   effects are checkable; how they actually feel needs a motor.
-- **Screenshots are from one emulator and one gateway**, at one point in a fast-moving beta, and
-  were taken before package provenance was recorded. They do not cover every state the app can
-  reach. Two known gaps: the cron-run grouping has no screenshot (the list was captured while it
-  held only test conversations and probes), and `02-sessions.png` predates the `This app ·
-  N sessions` grouping header that now heads the list. Replacing either needs a connected
-  gateway and a quiet emulator, which is why they are documented rather than quietly shipped as
-  current.
+- **Screenshots are from one emulator and one gateway**, at one point in a fast-moving beta:
+  the debug package `1.0.0-beta.10-debug` against `hermes serve` v0.21.0, all captured with
+  *Allow screenshots* on. They do not cover every state the app can reach. The cold-cache form
+  of the disconnected screen — an empty list under the gateway banner — no longer reproduces on
+  a device that already holds sessions, because the app keeps showing the ones it has; the
+  capture above is the failed reconnect instead.
 - **No instrumented UI test suite.** There is no `app/src/androidTest` source set; UI behaviour
   is verified by hand on the emulator, and the Compose-level logic that can be tested headlessly
   (search, the pull ratchet, scroll gating, grouping, palette) is covered by JVM tests instead.
