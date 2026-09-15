@@ -38,10 +38,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -499,7 +500,11 @@ private fun SearchField(
     onQueryChange: (String) -> Unit,
     total: Int,
 ) {
-    OutlinedTextField(
+    // Contained, like the conversations search bar: M3's search specs carry the
+    // outlined style as "not recommended" in favour of a filled field in the
+    // `surfaceContainerHigh` role, and two search boxes in one app should not be
+    // two different components.
+    TextField(
         value = query,
         onValueChange = onQueryChange,
         placeholder = { Text("Search $total models") },
@@ -516,6 +521,13 @@ private fun SearchField(
             }
         },
         shape = AgentShapes.pill,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp),
