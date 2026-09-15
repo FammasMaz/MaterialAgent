@@ -466,7 +466,12 @@ fun SettingsScreen(
                         )
                     },
                     onClick = {
-                        cue(HapticCue.SENT)
+                        // A tap on a control that opens something, which is what
+                        // the vocabulary reserves UI_ACTION for. SENT is the
+                        // "heard you" receipt the composer uses to send a prompt,
+                        // and it is the most-used cue in the app — the reason the
+                        // vocabulary has a separate name here at all.
+                        cue(HapticCue.UI_ACTION)
                         runCatching {
                             uriHandler.openUri("https://github.com/FammasMaz/MaterialAgent")
                         }
