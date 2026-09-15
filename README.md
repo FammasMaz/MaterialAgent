@@ -79,7 +79,7 @@ Notes worth knowing:
 | `401` on sign-in | Wrong username or password (or the server has no password provider). |
 | `403` using an access token | The server has authentication on and no dev-token access; switch to `Password`. |
 | The APK will not install over an existing one | Updates must be signed with the same certificate. Uninstall the older build first — or update from inside the app instead. |
-| No notifications about finished turns | Grant the notification permission, then check **Settings → Notifications** in the app. |
+| No notifications about finished turns | Grant the notification permission, then check **Settings → Background & notifications** in the app. |
 | Screenshots come out black | The app blocks them by default, so a transcript cannot leak into the screenshots folder or the Recents view. Turn on **Settings → Allow screenshots**. |
 | A session that is missing from the list | A session is only persisted once its first turn completes; the server also cannot delete an active one. |
 
